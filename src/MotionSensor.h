@@ -33,6 +33,13 @@ public:
   float hzMinSession() const;
   void printFastStatus();
 
+  // Nachkalibrierung im laufenden Betrieb. Der Gyro-Offset wird sonst nur beim
+  // Booten bestimmt - wurde der Stab dabei bewegt, driftet das Bild die ganze
+  // Sitzung. Die Messung laeuft im Sensor-Task selbst (kein zweiter I2C-Nutzer)
+  // und startet erst, wenn der Stab ruht.
+  void requestCalibration();
+  bool isCalibrating() const;
+
   // Diagnose einer Schleuder-Sitzung (im RAM gesammelt, ins NVS gesichert).
   void resetDiag();         // beim Display-Start
   void saveDiag();          // beim Verlassen des Displays
@@ -56,6 +63,12 @@ private:
   volatile bool rotating = false;
   volatile bool locked = false;
   volatile bool resetRequested = false;
+
+  // Nachkalibrierung (laeuft im Sensor-Task)
+  volatile bool calibRequested = false;
+  volatile bool calibBusy = false;
+  uint16_t calibCount = 0;
+  float calibSum = 0.0f;
 
   float gyroOffset = 0.0f;
   uint32_t lastStepUs = 0;

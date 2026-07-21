@@ -62,6 +62,15 @@ void MotionSensor::resetAngle() {
   resetRequested = true;
 }
 
+void MotionSensor::requestCalibration() {
+  calibCount = 0;
+  calibSum = 0.0f;
+  calibBusy = false;
+  calibRequested = true;
+}
+
+bool MotionSensor::isCalibrating() const { return calibRequested; }
+
 void MotionSensor::step() {
   const uint32_t now = micros();
   uint32_t dtUs = now - lastStepUs;
@@ -115,6 +124,27 @@ void MotionSensor::step() {
 
   if (!rotating) {
     angleRad = 0.0f;
+
+    // Angeforderte Nachkalibrierung: nur im Stillstand mitteln. Der Wert ist
+    // bereits offsetbereinigt, der Mittelwert also der verbliebene Restbias.
+    if (calibRequested) {
+      if (!calibBusy) { calibBusy = true; calibCount = 0; calibSum = 0.0f; }
+      if (aspeed < 0.35f) {
+        calibSum += gyroRad;
+        if (++calibCount >= CALIB_SAMPLES) {
+          gyroOffset += calibSum / calibCount;
+          calibRequested = false;
+          calibBusy = false;
+          Serial.print("Nachkalibriert, Offset=");
+          Serial.println(gyroOffset, 6);
+        }
+      } else {
+        calibCount = 0;  // Bewegung erkannt -> Messung neu beginnen
+        calibSum = 0.0f;
+      }
+      return;
+    }
+
     // Restbias im Stillstand langsam nachfuehren -> weniger Gyro-Drift pro Session.
     if (aspeed < 0.05f) gyroOffset += gyroRad * 0.002f;
     return;

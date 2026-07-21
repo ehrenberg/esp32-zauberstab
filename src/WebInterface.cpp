@@ -3,6 +3,7 @@
 #include "Patterns.h"
 #include "PatternStore.h"
 #include "PhotoStore.h"
+#include <math.h>
 
 WebInterface::WebInterface(Settings& settings, LedController& leds, PovRenderer& renderer, AppMode& mode)
   : server(80), settings(settings), leds(leds), renderer(renderer), mode(mode) {}
@@ -56,6 +57,7 @@ void WebInterface::routes() {
   server.on("/api/photo", HTTP_POST, [this]() { handlePhotoPost(); });
   server.on("/api/clear", HTTP_POST, [this]() { handleClear(); });
   server.on("/api/frame", [this]() { handleFrame(); });
+  server.on("/api/calibrate", HTTP_POST, [this]() { handleCalibrate(); });
   server.on("/api/start", HTTP_POST, [this]() { handleStart(); });
   server.on("/api/stop", HTTP_POST, [this]() { handleStop(); });
   server.onNotFound([this]() { server.send_P(200, "text/html", INDEX_HTML); });
@@ -121,6 +123,13 @@ String WebInterface::stateJson() {
   }
   j += "]";
 
+  j += ",\"heavy\":[";
+  for (uint8_t i = 0; i < Patterns::COUNT; i++) {
+    if (i) j += ",";
+    j += Patterns::isHeavy(i) ? "1" : "0";
+  }
+  j += "]";
+
   j += ",\"palette\":[";
   for (uint8_t i = 0; i < PALETTE_SIZE; i++) {
     if (i) j += ",";
@@ -150,6 +159,7 @@ void WebInterface::handleStatus() {
   j += ",\"errMax\":" + String(renderer.errMaxDeg(), 1);
   j += ",\"rpmMax\":" + String(renderer.rpmMaxSession(), 1);
   j += ",\"hzMin\":" + String(renderer.hzMinSession(), 0);
+  j += ",\"calib\":" + String(renderer.isCalibrating() ? 1 : 0);
   j += ",\"heap\":" + String(ESP.getFreeHeap());
   j += ",\"uptime\":" + String(millis() / 1000);
   j += "}";
@@ -247,19 +257,68 @@ void WebInterface::handleClear() {
 }
 
 void WebInterface::handleFrame() {
-  static uint8_t buf[PREVIEW_COLS * NUM_LEDS * 3];
+  // Dasselbe Winkelraster wie der Renderer, sonst luegt die Vorschau:
+  //  - Vollkreis/Text/Malen: genau povColumns Spalten ueber 360 Grad.
+  //  - positioniertes Bild:  nur dessen Winkelfenster, dafuer fein aufgeloest.
+  const bool positioned = settings.imageMode && settings.patternMode == PATTERN_MODE_BUILTIN;
+
+  float a0 = 0.0f;
+  float span = TWO_PI_F;
+  uint16_t cols = settings.povColumns;
+
+  if (positioned) {
+    // Fensterbreite identisch zu PovRenderer::render() berechnen.
+    const float rr = settings.imageRadius * 0.01f;
+    const float k = settings.imageScale * 0.01f;
+    const float windowHalf = (rr <= k) ? PI_F : (asinf(k / rr) + 0.25f);
+    span = windowHalf * 2.0f;
+    if (span > TWO_PI_F) span = TWO_PI_F;
+    a0 = settings.imageAngleDeg * (TWO_PI_F / 360.0f) - span * 0.5f;
+    cols = PREVIEW_FINE_COLS;
+  }
+  if (cols > PREVIEW_MAX_COLS) cols = PREVIEW_MAX_COLS;
+
+  // Eine Zeit fuer den ganzen Frame - sonst zeigt die Vorschau ein in sich
+  // verdrehtes Bild statt eines Momentaufnahme. Der Client kann durch
+  // wiederholte Abfragen animieren.
+  const uint32_t tMs = millis();
+
+  static uint8_t buf[PREVIEW_BYTES];
   size_t n = 0;
-  for (uint8_t col = 0; col < PREVIEW_COLS; col++) {
-    Patterns::render(scratch, settings, TWO_PI_F * col / PREVIEW_COLS, col, PREVIEW_COLS);
+  for (uint16_t c = 0; c < cols; c++) {
+    const float theta = a0 + span * (c + 0.5f) / cols;
+    Patterns::render(scratch, settings, theta, static_cast<uint8_t>(c), static_cast<uint8_t>(cols), tMs);
     for (uint16_t i = 0; i < NUM_LEDS; i++) {
-      buf[n++] = scratch[i].r;
-      buf[n++] = scratch[i].g;
-      buf[n++] = scratch[i].b;
+      // RGB565 halbiert die Nutzlast gegenueber RGB888 - fuer eine Vorschau
+      // ist der Farbverlust unsichtbar, der Heap-Druck am AP aber real.
+      const uint16_t v = ((scratch[i].r & 0xF8) << 8) | ((scratch[i].g & 0xFC) << 3) | (scratch[i].b >> 3);
+      buf[n++] = v >> 8;
+      buf[n++] = v & 0xFF;
     }
   }
-  String data = PatternStore::base64Encode(buf, n);
-  String j = "{\"cols\":" + String(PREVIEW_COLS) + ",\"leds\":" + String(NUM_LEDS) + ",\"data\":\"" + data + "\"}";
-  server.send(200, "application/json", j);
+
+  // Gestueckelt senden: eine 21-KB-String-Kette wuerde den Heap bei aktivem AP
+  // unnoetig fragmentieren.
+  String head = "{\"cols\":" + String(cols) +
+                ",\"leds\":" + String(NUM_LEDS) +
+                ",\"a0\":" + String(a0, 4) +
+                ",\"span\":" + String(span, 4) +
+                ",\"persist\":" + String(settings.angularPersistence) +
+                ",\"data\":\"";
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "application/json", "");
+  server.sendContent(head);
+  for (size_t off = 0; off < n; off += 3072) {
+    const size_t chunk = (n - off < 3072) ? (n - off) : 3072;  // Vielfaches von 3 -> kein '=' mittendrin
+    server.sendContent(PatternStore::base64Encode(buf + off, chunk));
+  }
+  server.sendContent("\"}");
+  server.sendContent("");
+}
+
+void WebInterface::handleCalibrate() {
+  renderer.requestCalibration();
+  server.send(200, "application/json", "{\"ok\":1}");
 }
 
 void WebInterface::handleStart() {

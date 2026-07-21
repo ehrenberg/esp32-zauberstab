@@ -212,6 +212,11 @@ void setText(const String& text, uint8_t colorIndex) {
   p.end();
 }
 
+uint16_t textColumns() {
+  const uint16_t n = static_cast<uint16_t>(textStr.length()) * 6;
+  return n < 6 ? 6 : n;
+}
+
 const String& getText() { return textStr; }
 uint8_t getTextColor() { return textColorIndex; }
 

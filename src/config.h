@@ -101,6 +101,8 @@ constexpr float PHASE_LOCK_MAX_RAD = 20.0f;       // ~3,2 U/s: darueber saettigt
 constexpr float PHASE_LOCK_REF = 0.0f;            // Zielwinkel an der Phasenmarke
 
 constexpr uint32_t SENSOR_SERIAL_INTERVAL_US = 50000;
+// Samplezahl der Nachkalibrierung im Betrieb (bei ~1 kHz Task ca. 1,5 s).
+constexpr uint16_t CALIB_SAMPLES = 1500;
 
 // ---- Muster-System -------------------------------------------------------
 constexpr uint8_t PATTERN_BUILTIN_COUNT = 20;   // eingebaute Muster
@@ -110,7 +112,16 @@ constexpr uint8_t CUSTOM_COLS = 48;             // Spalten im Zeichengitter
 constexpr uint16_t CUSTOM_CELLS = static_cast<uint16_t>(CUSTOM_COLS) * NUM_LEDS;
 constexpr uint16_t CUSTOM_BYTES = (CUSTOM_CELLS + 1) / 2;  // 4-Bit gepackt
 constexpr uint8_t TEXT_MAX = 32;                // max Zeichen im Text
-constexpr uint8_t PREVIEW_COLS = 40;            // Spalten der Web-Vorschau
+
+// Web-Vorschau: im Vollkreis-Modus rendert sie genau povColumns Spalten ueber
+// 360 Grad (also exakt das, was der Stab zeigt). Im positionierten Bild-Modus
+// deckt das Bild nur ein schmales Winkelfenster ab - dort waeren gleichmaessig
+// verteilte Spalten viel zu grob (10 von 40 traefen das Bild). Deshalb wird
+// dann nur das Fenster abgetastet, dafuer mit PREVIEW_FINE_COLS Schritten -
+// vergleichbar fein wie die adaptiven Schritte des Renderers.
+constexpr uint8_t PREVIEW_FINE_COLS = 120;
+constexpr uint16_t PREVIEW_MAX_COLS = 192;      // Puffergroesse (>= povColumns-Max und PREVIEW_FINE_COLS)
+constexpr uint32_t PREVIEW_BYTES = static_cast<uint32_t>(PREVIEW_MAX_COLS) * NUM_LEDS * 2;  // RGB565
 
 constexpr uint8_t PATTERN_MODE_BUILTIN = 0;
 constexpr uint8_t PATTERN_MODE_CUSTOM = 1;

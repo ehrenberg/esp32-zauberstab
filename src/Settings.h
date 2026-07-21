@@ -17,7 +17,7 @@ struct Settings {
 
   // Musterauswahl
   uint8_t patternMode = PATTERN_MODE_BUILTIN;  // 0 builtin, 1 custom, 2 text
-  uint8_t selectedPattern = 13;                // eingebauter Index (13 = Smiley)
+  uint8_t selectedPattern = 0;                 // eingebauter Index (0 = Komet)
   uint8_t customSlot = 0;                      // aktiver Zeichen-Slot
   uint8_t textColor = 2;                       // Palettenindex fuer Text
   uint8_t imageSlot = 0;                       // aktiver Foto-Slot

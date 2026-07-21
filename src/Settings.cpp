@@ -7,8 +7,9 @@ void clampSettings(Settings& settings) {
   if (settings.povColumns < 8) settings.povColumns = 8;
   // SK9822 schafft locker >300 show()/s -> Spalten sind nicht mehr durch den
   // Strip, sondern durch die Winkelaufloesung begrenzt. Der Renderer drosselt
-  // bei niedriger Drehzahl ohnehin adaptiv herunter.
-  if (settings.povColumns > 64) settings.povColumns = 64;
+  // bei niedriger Drehzahl ohnehin adaptiv herunter. Die alte 64er-Grenze stammte
+  // vom WS2812B und war zu niedrig fuer Text (bis 192 Spalten) und Fotos (72).
+  if (settings.povColumns > 192) settings.povColumns = 192;
   if (settings.brightness < 1) settings.brightness = 1;
   if (settings.brightness > 100) settings.brightness = 100;
   if (settings.currentLimitMa < 300) settings.currentLimitMa = 300;

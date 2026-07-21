@@ -28,6 +28,8 @@ public:
   float errMaxDeg() const;
   float rpmMaxSession() const;
   float hzMinSession() const;
+  void requestCalibration();
+  bool isCalibrating() const;
 
 private:
   Settings& settings;
@@ -42,5 +44,9 @@ private:
   uint32_t outputCounter = 0;
   uint32_t outputRate = 0;
   uint32_t lastOutputRateAt = 0;
+  // Animationszeit, einmal pro Umdrehung uebernommen. Wuerde jede Spalte
+  // millis() frisch lesen, liefe die Animation waehrend einer Umdrehung weiter
+  // und das Bild erschiene in sich verdreht statt als bewegtes Ganzes.
+  uint32_t animMs = 0;
   CRGB scratch[NUM_LEDS];
 };

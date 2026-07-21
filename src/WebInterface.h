@@ -41,6 +41,7 @@ private:
   void handlePhotoPost();
   void handleClear();
   void handleFrame();
+  void handleCalibrate();
   void handleStart();
   void handleStop();
 

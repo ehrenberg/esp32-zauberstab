@@ -19,9 +19,14 @@ PovRenderer renderer(settings, ledController, motionSensor);
 WebInterface web(settings, ledController, renderer, mode);
 ButtonHandler button;
 
+// Im Display-Modus per Taster geaenderte Auswahl: wird erst beim Verlassen
+// gesichert, damit kein NVS-Write die POV-Schleife stoert.
+bool settingsDirty = false;
+
 void enterSetupMode();
 void startDisplay();
 void stopToIdle();
+void flushSettings();
 void handleShortPress();
 void handleLongPress();
 
@@ -100,13 +105,21 @@ void handleShortPress() {
   }
 
   if (mode == MODE_DISPLAY) {
-    // Kurzdruck blaettert durch die eingebauten Muster.
-    settings.patternMode = PATTERN_MODE_BUILTIN;
-    settings.selectedPattern++;
-    if (settings.selectedPattern >= Patterns::COUNT) settings.selectedPattern = 0;
+    // Kurzdruck blaettert durch die eingebauten Muster. Der erste Druck aus
+    // einem anderen Modus (Text/Zeichnung/Foto) wechselt nur zu den eingebauten
+    // Mustern, ohne die Auswahl zu ueberspringen - vorher ging dabei still die
+    // aktive Auswahl verloren.
+    if (settings.patternMode != PATTERN_MODE_BUILTIN) {
+      settings.patternMode = PATTERN_MODE_BUILTIN;
+    } else {
+      settings.selectedPattern++;
+      if (settings.selectedPattern >= Patterns::COUNT) settings.selectedPattern = 0;
+    }
 
-    saveSettings(settings);
-    ledController.showPatternChange(settings.selectedPattern);
+    // Kein saveSettings() und kein delay() im laufenden Betrieb: der NVS-Write
+    // blockiert die POV-Schleife sichtbar und nutzt den Flash unnoetig ab.
+    // Gesichert wird beim Verlassen des Display-Modus.
+    settingsDirty = true;
     renderer.reset();
     return;
   }
@@ -129,8 +142,15 @@ void startDisplay() {
   Serial.println("Display gestartet");
 }
 
+void flushSettings() {
+  if (!settingsDirty) return;
+  settingsDirty = false;
+  saveSettings(settings);
+}
+
 void stopToIdle() {
   motionSensor.saveDiag();
+  flushSettings();
   mode = MODE_IDLE;
   renderer.reset();
   ledController.clear(true);
@@ -140,6 +160,7 @@ void stopToIdle() {
 
 void enterSetupMode() {
   motionSensor.saveDiag();  // Diagnose der gerade beendeten Sitzung sichern
+  flushSettings();
 #if POV_DEBUG_SERIAL
   printSettings(settings);
 #endif

@@ -16,6 +16,7 @@ void PovRenderer::reset() {
   outputCounter = 0;
   outputRate = 0;
   lastOutputRateAt = millis();
+  animMs = millis();
   sensor.resetAngle();
 }
 
@@ -54,6 +55,11 @@ void PovRenderer::render() {
     if (gateSteps > POV_MAX_FINE_STEPS) gateSteps = POV_MAX_FINE_STEPS;
   } else {
     gateSteps = settings.povColumns;
+    // Text/Zeichnung/Foto haben eine eigene native Spaltenzahl. Liegt povColumns
+    // darunter, werden Bildspalten schlicht uebersprungen - ein 12-Zeichen-Text
+    // braucht 72 Spalten, mit 46 fehlt jede dritte Glyphenspalte.
+    const uint16_t need = Patterns::nativeColumns(settings);
+    if (need > gateSteps) gateSteps = need;
     if (maxCols < gateSteps) gateSteps = maxCols < 4 ? 4 : maxCols;
   }
   effectiveCols = gateSteps > 255 ? 255 : static_cast<uint8_t>(gateSteps);
@@ -91,6 +97,9 @@ void PovRenderer::render() {
   const bool forced = now - lastShowAt >= settings.maxColumnHoldUs;
   if (!columnChanged && !forced) return;
 
+  // Umdrehungswechsel (Spaltenindex springt zurueck) -> Animationszeit nachziehen.
+  if (currentColumn == 0xFFFF || nextColumn < currentColumn) animMs = millis();
+
   currentColumn = nextColumn;
   lastShowAt = now;
   lastFrameBlack = false;
@@ -99,7 +108,14 @@ void PovRenderer::render() {
   else fill_solid(leds, NUM_LEDS, CRGB::Black);
 
   // Spaltenindex fuer Custom-/Text-Bitmaps (die einen Index, keinen Winkel nutzen).
-  const uint8_t custColumns = settings.povColumns;
+  // Im Vollkreis entspricht das Bitmap-Raster jetzt 1:1 dem Winkelraster - vorher
+  // wurde hier auf povColumns zurueckgerechnet und der eben gewonnene Zugewinn
+  // an Spalten wieder weggeworfen. Im positionierten Bild-Modus laeuft gateSteps
+  // bis POV_MAX_FINE_STEPS, das muss auf den uint8_t-Index gedeckelt werden.
+  uint16_t custColumns16 = positioned ? settings.povColumns : gateSteps;
+  if (custColumns16 > 255) custColumns16 = 255;
+  if (custColumns16 < 1) custColumns16 = 1;
+  const uint8_t custColumns = static_cast<uint8_t>(custColumns16);
   uint8_t custCol = static_cast<uint8_t>((static_cast<uint32_t>(nextColumn) * custColumns) / gateSteps);
   if (custCol >= custColumns) custCol = custColumns - 1;
 
@@ -110,7 +126,7 @@ void PovRenderer::render() {
 
   for (uint8_t p = 0; p < persistence; p++) {
     const float th = angle + (static_cast<int>(p) - static_cast<int>(halfP)) * angStep;
-    Patterns::render(scratch, settings, th, custCol, custColumns);
+    Patterns::render(scratch, settings, th, custCol, custColumns, animMs);
     for (uint16_t j = 0; j < NUM_LEDS; j++) {
       if (scratch[j].r > leds[j].r) leds[j].r = scratch[j].r;
       if (scratch[j].g > leds[j].g) leds[j].g = scratch[j].g;
@@ -148,3 +164,5 @@ float PovRenderer::errAvgDeg() const { return sensor.errAvgDeg(); }
 float PovRenderer::errMaxDeg() const { return sensor.errMaxDeg(); }
 float PovRenderer::rpmMaxSession() const { return sensor.rpmMaxSession(); }
 float PovRenderer::hzMinSession() const { return sensor.hzMinSession(); }
+void PovRenderer::requestCalibration() { sensor.requestCalibration(); }
+bool PovRenderer::isCalibrating() const { return sensor.isCalibrating(); }

@@ -27,8 +27,12 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 16px 9
 .view{display:none;animation:f .22s ease}
 .view.act{display:block}
 @keyframes f{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.previewWrap{display:flex;justify-content:center;margin:2px 0 16px}
-#preview{width:230px;height:230px;border-radius:50%;background:#000;box-shadow:0 0 0 2px #23233a,0 14px 40px -12px #000,inset 0 0 30px #000}
+.previewWrap{display:flex;flex-direction:column;align-items:center;margin:2px 0 16px}
+#preview{width:min(68vw,260px);aspect-ratio:1;border-radius:50%;background:#000;box-shadow:0 0 0 2px #23233a,0 14px 40px -12px #000}
+#previewInfo{margin-top:9px;font-size:11px;color:var(--mut);letter-spacing:.4px}
+#previewAnim{margin-top:7px;font-size:11px;color:var(--mut);border:1px solid #2a2a3a;background:#000;border-radius:999px;padding:5px 12px;cursor:pointer}
+#previewAnim.on{color:var(--acc2);border-color:#0e4a57}
+.hvy{margin-left:5px;opacity:.75;font-size:12px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tile{background:var(--card);border:1px solid #24243400;border-radius:16px;padding:15px 12px;font-size:15px;font-weight:600;text-align:center;cursor:pointer;transition:.12s;border:1px solid #23233a}
 .tile:active{transform:scale(.96)}
@@ -87,7 +91,8 @@ nav .ic{font-size:21px;line-height:1}
 <span id="pillStart" class="pill" onclick="App.toggleRun()" style="cursor:pointer">▶</span>
 </header>
 <main>
-<div class="previewWrap"><canvas id="preview" width="230" height="230"></canvas></div>
+<div class="previewWrap"><canvas id="preview"></canvas><div id="previewInfo"></div>
+<button id="previewAnim" onclick="App.toggleAnim()">▶ Animation</button></div>
 
 <section id="v-muster" class="view act">
 <div id="tiles" class="grid"></div>
@@ -144,6 +149,8 @@ nav .ic{font-size:21px;line-height:1}
 <label class="row"><span>Gyro-Achse <i class="info" onclick="App.info('axis')">i</i></span><select id="axis" onchange="App.saveSet('axis',this.value)"><option value="0">X</option><option value="1">Y</option><option value="2">Z</option></select></label>
 <label class="row"><span>Richtung invertieren <i class="info" onclick="App.info('invert')">i</i></span><span class="sw"><input type="checkbox" id="invert" onchange="App.saveSet('invert',this.checked?1:0)"><i></i></span></label>
 <label class="row"><span>Phase-Lock (Drift-Korrektur) <i class="info" onclick="App.info('plock')">i</i></span><span class="sw"><input type="checkbox" id="plock" onchange="App.saveSet('plock',this.checked?1:0)"><i></i></span></label>
+<button class="btn sec" style="margin-top:8px" onclick="App.calibrate()">Sensor neu kalibrieren</button>
+<p class="hint" style="margin-top:10px">Der Gyro-Nullpunkt wird sonst nur beim Einschalten bestimmt. Wandert das Bild langsam, hier neu kalibrieren – Stab dabei still halten.</p>
 </div>
 <div class="card"><h2>Betrieb</h2>
 <div class="btnrow"><button class="btn ok" onclick="App.run(1)">Display starten</button><button class="btn warn" onclick="App.run(0)">Stop</button></div>
@@ -177,10 +184,10 @@ nav .ic{font-size:21px;line-height:1}
 </div>
 <script>
 const App={
- st:null,pal:[],cols:40,leds:65,curSlot:0,curColor:2,grid:null,CW:48,_pt:null,curPhotoSlot:0,
+ st:null,pal:[],leds:65,curSlot:0,curColor:2,grid:null,CW:48,_pt:null,curPhotoSlot:0,_frame:null,
  async j(u,o){const r=await fetch(u,o);return r.headers.get('content-type')&&r.headers.get('content-type').includes('json')?r.json():r.text()},
  async init(){
-  this.st=await this.j('/api/state');this.pal=this.st.palette;
+  this.st=await this.j('/api/state');this.pal=this.st.palette;this.leds=this.st.imgRows;
   this.buildTiles();this.buildSlots();this.buildPalettes();this.buildSettings();this.buildPhotoSlots();this.fill();
   this.grid=new Uint8Array(this.CW*this.leds);this.tab('muster');
   await this.loadSlot(this.st.customSlot);this.refresh();
@@ -190,7 +197,10 @@ const App={
   document.getElementById('v-'+v).classList.add('act');
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('act',b.dataset.v===v));},
  buildTiles(){const g=document.getElementById('tiles');g.innerHTML='';
+  const hv=this.st.heavy||[];
   this.st.patterns.forEach((n,i)=>{const d=document.createElement('div');d.className='tile';d.textContent=n;
+   // Blitz = leuchtet viele LEDs gleichzeitig -> Stromlimit dimmt global herunter.
+   if(hv[i]){const s=document.createElement('span');s.className='hvy';s.textContent='⚡';d.appendChild(s);}
    d.onclick=()=>this.pick(0,i);g.appendChild(d);});this.markTiles();},
  markTiles(){document.querySelectorAll('#tiles .tile').forEach((t,i)=>
    t.classList.toggle('sel',this.st.patternMode==0&&i==this.st.pattern));},
@@ -202,7 +212,7 @@ const App={
   mk(document.getElementById('drawPal'),this.curColor,(i,h)=>{this.curColor=i;[...h.children].forEach((c,k)=>c.classList.toggle('sel',k==i));});
   mk(document.getElementById('textPal'),this.st.textColor,(i,h)=>{this.curTextColor=i;[...h.children].forEach((c,k)=>c.classList.toggle('sel',k==i));this.textApply();});
   this.curTextColor=this.st.textColor;},
- SET_A:[['bright','Helligkeit',1,100,1],['columns','POV-Spalten',8,64,1],['blur','Nachleuchten',0,250,1],['persist','Winkelbreite',1,9,1],['current','Stromlimit mA',300,3000,100],['holdus','Halten µs',2000,30000,100]],
+ SET_A:[['bright','Helligkeit',1,100,1],['columns','POV-Spalten',8,192,1],['blur','Nachleuchten',0,250,1],['persist','Winkelbreite',1,9,1],['current','Stromlimit mA',300,3000,100],['holdus','Halten µs',2000,30000,100]],
  SET_B:[['gain','Angle Gain (Drift-Trim)',0.2,3,0.005],['threshold','Gyro-Schwelle',0.05,8,0.05]],
  SET_IMG:[['iang','Bildwinkel',0,359,1],['irad','Bildhoehe',0,100,1],['iscale','Bildgroesse',5,100,1]],
  buildSettings(){const mk=(host,arr)=>{host.innerHTML='';arr.forEach(([k,lab,mn,mx,st])=>{
@@ -226,18 +236,54 @@ const App={
  async pick(mode,index){this.st.patternMode=mode;if(mode==0)this.st.pattern=index;
   await this.j('/api/select?mode='+mode+'&index='+index,{method:'POST'});this.markTiles();this.refresh();},
  async saveSet(k,v){const b=new URLSearchParams();b.set(k,v);
-  this.st=await this.j('/api/settings',{method:'POST',body:b});this.refresh();},
+  // fill() zieht die Regler nach: clampSettings() kann den Wert korrigiert haben.
+  this.st=await this.j('/api/settings',{method:'POST',body:b});this.fill();this.refresh();},
+ async calibrate(){if(!confirm('Sensor neu kalibrieren?\n\nStab dabei ruhig und still halten.'))return;
+  await fetch('/api/calibrate',{method:'POST'});this.flash('Kalibriere…');},
  // ---- Vorschau ----
  previewSoon(){clearTimeout(this._pt);this._pt=setTimeout(()=>this.textApply(),500);},
- async refresh(){const f=await this.j('/api/frame');this.cols=f.cols;this.leds=f.leds;this.draw(f.data);},
- draw(b64){const raw=atob(b64),n=raw.length,cv=document.getElementById('preview'),x=cv.getContext('2d');
-  const W=cv.width,cx=W/2,cy=W/2,R=W/2-4;x.clearRect(0,0,W,W);x.fillStyle='#000';
-  const dr=R/this.leds*1.7;
-  for(let c=0;c<this.cols;c++){const a=2*Math.PI*c/this.cols;const ca=Math.cos(a),sa=Math.sin(a);
-   for(let i=0;i<this.leds;i++){const o=(c*this.leds+i)*3,r=raw.charCodeAt(o),g=raw.charCodeAt(o+1),bl=raw.charCodeAt(o+2);
-    if(r+g+bl<12)continue;const rad=i/(this.leds-1)*R;
-    x.fillStyle='rgb('+r+','+g+','+bl+')';x.beginPath();
-    x.arc(cx+rad*ca,cy+rad*sa,dr,0,6.3);x.fill();}}},
+ // Animierte Muster als Daumenkino: bewusst opt-in, jeder Frame sind ~21 KB
+ // ueber den AP und der ESP rendert ihn synchron im Webserver-Handler.
+ toggleAnim(){const b=document.getElementById('previewAnim');
+  if(this._anim){clearInterval(this._anim);this._anim=null;b.classList.remove('on');b.textContent='▶ Animation';return;}
+  b.classList.add('on');b.textContent='■ Animation';
+  this._anim=setInterval(()=>{if(!document.hidden)this.refresh();},900);},
+ async refresh(){const f=await this.j('/api/frame');this._frame=f;this.draw(f);
+  const deg=(f.span*180/Math.PI).toFixed(0);
+  document.getElementById('previewInfo').textContent=
+   f.span<6.2?f.cols+' Schritte über '+deg+'° · Bildfenster':f.cols+' Spalten · Vollkreis';},
+ // Jede Spalte ist ein Kreissegment, kein Punkt: bei 46 Spalten liegen am
+ // Aussenrand ~17 px zwischen zwei Spalten - gezeichnete Punkte hinterlassen
+ // dort Luecken und das Muster zerfaellt zu Konfetti. Gleichfarbige LEDs
+ // untereinander werden zu einem Bogen zusammengefasst (statt 7800 Pfaden).
+ draw(f){if(!f)return;
+  const cv=document.getElementById('preview'),dpr=Math.min(window.devicePixelRatio||1,3);
+  const W=cv.clientWidth||240,px=Math.round(W*dpr);
+  if(cv.width!==px){cv.width=px;cv.height=px;}
+  const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);
+  const cx=W/2,cy=W/2,R=W/2-4;
+  x.clearRect(0,0,W,W);
+  const raw=atob(f.data),cols=f.cols,leds=f.leds,step=f.span/cols;
+  // Winkelbreite wie am Stab: persist verbreitert jede Spalte um Nachbarschritte.
+  const hw=step*0.5*Math.max(1,f.persist)*1.08;
+  const dr=R/(leds-1);
+  for(let c=0;c<cols;c++){
+   const a=f.a0+step*(c+0.5);
+   let s=-1,cr=0,cg=0,cb=0;
+   const flush=e=>{if(s<0)return;
+    const r0=Math.max(s*dr-dr*0.5,0),r1=e*dr+dr*0.5,mid=(r0+r1)/2;
+    x.strokeStyle='rgb('+cr+','+cg+','+cb+')';x.lineWidth=r1-r0;
+    x.beginPath();x.arc(cx,cy,Math.max(mid,0.1),a-hw,a+hw);x.stroke();s=-1;};
+   for(let i=0;i<leds;i++){
+    const o=(c*leds+i)*2,v=(raw.charCodeAt(o)<<8)|raw.charCodeAt(o+1);
+    const r=((v>>11&31)*255/31)|0,g=((v>>5&63)*255/63)|0,b=((v&31)*255/31)|0;
+    if(!(r|g|b)){flush(i-1);continue;}
+    if(s<0){s=i;cr=r;cg=g;cb=b;}
+    else if(r!==cr||g!==cg||b!==cb){flush(i-1);s=i;cr=r;cg=g;cb=b;}}
+   flush(leds-1);}
+  // Marke bei 12 Uhr - macht den Regler "Bildwinkel" ablesbar (270° = oben).
+  x.strokeStyle='#3a3a52';x.lineWidth=2;x.beginPath();
+  x.moveTo(cx,cy-R-1);x.lineTo(cx,cy-R+7);x.stroke();},
  // ---- Editor ----
  async loadSlot(i){this.curSlot=i;this.buildSlots();
   const d=await this.j('/api/draw?slot='+i);const raw=atob(d.data);
@@ -300,14 +346,16 @@ const App={
   await fetch('/api/'+(on?'start':'stop'),{method:'POST'});
   if(on){document.getElementById('pill').textContent='Display laeuft – WLAN getrennt';}},
  async poll(){try{const s=await this.j('/api/status');const p=document.getElementById('pill');
+  if(this.st)this.st.mode=s.mode;  // sonst weiss toggleRun() nie, dass schon laeuft
   p.className='pill'+(s.rotating?' on':'')+(s.locked?' lock':'');
-  p.textContent=s.mode=='DISPLAY'?(Math.round(s.rpm)+' RPM · '+s.effCols+' Sp'+(s.locked?' · LOCK':'')):s.mode;
+  p.textContent=s.calib?'Kalibriere – Stab still halten'
+   :s.mode=='DISPLAY'?(Math.round(s.rpm)+' RPM · '+s.effCols+' Sp'+(s.locked?' · LOCK':'')):s.mode;
   document.getElementById('pillStart').textContent=s.mode=='DISPLAY'?'■':'▶';this.renderDev(s);}catch(e){}},
  flash(m){const p=document.getElementById('pill');const o=p.textContent;p.textContent=m;setTimeout(()=>p.textContent=o,1200);},
  // ---- Info-Modal ----
  INFO:{
   bright:['Helligkeit','Gesamthelligkeit der LEDs (1-100). Hoeher = heller, zieht aber mehr Strom. Bei schwachem Akku niedriger halten.'],
-  columns:['POV-Spalten','Winkelaufloesung im Vollkreis-, Text- und Mal-Modus (8-64). Mehr = feiner, aber dunkler. Das positionierte Bild ("Bild oben") regelt seine Schaerfe selbst.'],
+  columns:['POV-Spalten','Winkelaufloesung im Vollkreis-, Text- und Mal-Modus (8-192). Mehr = feiner, aber jede Spalte steht kuerzer und wirkt dunkler. Text, Zeichnungen und Fotos heben den Wert automatisch auf ihren eigenen Bedarf an (Text: 6 Spalten pro Zeichen, Foto: 72), damit keine Bildspalte verschluckt wird. Das positionierte Bild ("Bild oben") regelt seine Schaerfe selbst.'],
   blur:['Nachleuchten','Laesst vorherige Frames langsam ausblenden (Bewegungsspur). 0 = gestochen scharf, hoeher = weicher Schweif.'],
   persist:['Winkelbreite','Verbreitert das Bild um zusaetzliche Winkelschritte. 1 = duennste Darstellung.'],
   current:['Stromlimit (mA)','Begrenzt den maximalen LED-Gesamtstrom - schuetzt Akku/Netzteil und haelt Farben/Spannung stabil.'],
@@ -338,6 +386,8 @@ const App={
 ['mousedown','touchstart'].forEach(ev=>document.getElementById('canvas').addEventListener(ev,e=>{App._d=1;App.paint(e);e.preventDefault();},{passive:false}));
 ['mousemove','touchmove'].forEach(ev=>document.getElementById('canvas').addEventListener(ev,e=>{if(App._d){App.paint(e);e.preventDefault();}},{passive:false}));
 ['mouseup','touchend','mouseleave'].forEach(ev=>document.getElementById('canvas').addEventListener(ev,()=>App._d=0));
+// Drehen des Telefons aendert die Canvas-Breite -> mit dem gecachten Frame neu zeichnen.
+let _rt;addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>App.draw(App._frame),150);});
 App.init();
 </script>
 </body>

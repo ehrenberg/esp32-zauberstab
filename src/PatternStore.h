@@ -18,6 +18,10 @@ void renderCustom(CRGB* leds, uint8_t slot, uint8_t column, uint8_t columns);
 
 // Text
 void setText(const String& text, uint8_t colorIndex);
+// Spaltenbedarf des aktuellen Textes (5 Glyphenspalten + 1 Luecke je Zeichen).
+// Wird die Anzeige mit weniger Spalten gefahren, fallen Glyphenspalten weg und
+// der Text wird unleserlich.
+uint16_t textColumns();
 const String& getText();
 uint8_t getTextColor();
 void renderText(CRGB* leds, uint8_t column, uint8_t columns);
