@@ -166,17 +166,23 @@ MPU6050 ──► MotionSensor ──► PovRenderer ──► Patterns ──�
              ~1 kHz, Prio 2)   Adaptivrate)    je Winkel)
 ```
 
+Der Quellcode liegt nach Modulen in Unterordnern unter `src/` (die Header werden
+über Include-Pfade in `platformio.ini` per Basisname gefunden, kein Pfad im `#include`):
+
 | Datei | Aufgabe |
 |---|---|
-| `main.cpp` | Modus-Zustandsautomat, Tastenlogik |
-| `config.h` | Pins, Sensorregister, Timing — dokumentiert die Messungen hinter den Werten |
-| `MotionSensor` | Gyro-Integration zum Drehwinkel, Phase-Lock, Telemetrie |
-| `PovRenderer` | Winkelquantisierung, adaptive Spaltenzahl, Bildfenster, Stab-Modus |
-| `Patterns` | 10 eingebaute Motive im kartesischen Bildraum |
-| `WandPatterns` | 8 kinetische Lichtspiele für den Stab-Modus (linear, kein POV) |
-| `PatternStore` | Zeichen-Slots und Text-Font (NVS) |
-| `PhotoStore` | Foto-Slots als RGB565-Polarbilder (LittleFS) |
-| `WebInterface` / `WebUI.h` | HTTP-API und eingebettete Single-Page-App |
+| `src/main.cpp` | Modus-Zustandsautomat, Tastenlogik |
+| `src/core/config.h` | Pins, Sensorregister, Timing — dokumentiert die Messungen hinter den Werten |
+| `src/core/Settings` · `AppMode` | Einstellungen (NVS) und Betriebszustand |
+| `src/sensor/MotionSensor` | Gyro-Integration zum Drehwinkel, Phase-Lock, Telemetrie |
+| `src/sensor/ButtonHandler` | Taster-Entprellung und Haltedauer-Logik |
+| `src/render/PovRenderer` | Winkelquantisierung, feste Spaltenzahl, Zeit-Modus, Stab-Modus |
+| `src/render/Patterns` | 10 eingebaute Motive im kartesischen Bildraum |
+| `src/render/WandPatterns` | 8 kinetische Lichtspiele für den Stab-Modus (linear, kein POV) |
+| `src/render/LedController` | FastLED-Ausgabe (SK9822, BGR) |
+| `src/store/PatternStore` | Zeichen-Slots und Text-Font (NVS) |
+| `src/store/PhotoStore` | Foto-Slots als RGB565-Polarbilder (LittleFS) |
+| `src/web/WebInterface` · `WebUI.h` | HTTP-API und eingebettete Single-Page-App |
 
 Der Sensor läuft in einem eigenen Task mit höherer Priorität als die POV-Schleife —
 so wird der Winkel auch während `FastLED.show()` weitergeführt. Der Core-0-Watchdog

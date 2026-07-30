@@ -22,6 +22,11 @@ scharf. Für Auslieferung auf 0 setzen — die Prints kosten Rechenzeit in der P
 
 Zielboard: `seeed_xiao_esp32c3`, Arduino-Framework. Kern-Libs: FastLED, Adafruit MPU6050.
 
+Quellcode nach Modulen in `src/` sortiert: `core/` (config, Settings, AppMode),
+`sensor/` (MotionSensor, ButtonHandler), `render/` (PovRenderer, Patterns, WandPatterns,
+LedController), `store/` (PatternStore, PhotoStore), `web/` (WebInterface, WebUI). Die
+Ordner stehen als Include-Pfade in `platformio.ini` — `#include` nutzt nur den Basisnamen.
+
 ## Datenfluss und Task-Modell
 
 ```
