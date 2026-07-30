@@ -31,6 +31,9 @@ void PovRenderer::render() {
   // der Streifen laeuft als lineares, bewegungsreaktives Lichtspiel.
   if (settings.wandMode) { renderWand(); return; }
 
+  // Zeit-Modus: Open-Loop, Spalten mit fester Taktung, Sensor ignoriert.
+  if (settings.timeMode) { renderTimed(); return; }
+
   const uint32_t now = micros();
   CRGB* leds = ledController.buffer();
 
@@ -101,14 +104,12 @@ void PovRenderer::render() {
       if (steps > POV_MAX_FINE_STEPS) steps = POV_MAX_FINE_STEPS;
       gateStepsLatched = static_cast<uint16_t>(steps);
     } else {
-      const uint16_t maxCols = static_cast<uint16_t>(revPeriodUs / frameTimeUs);
+      // Feste Spaltenzahl (nicht mehr an die zappelnde Drehzahlschaetzung
+      // gedeckelt) - kein "Atmen" mehr zwischen Umdrehungen.
       uint16_t g = settings.povColumns;
-      // Text/Zeichnung/Foto haben eine eigene native Spaltenzahl. Liegt povColumns
-      // darunter, werden Bildspalten schlicht uebersprungen - ein 12-Zeichen-Text
-      // braucht 72 Spalten, mit 46 fehlt jede dritte Glyphenspalte.
       const uint16_t need = Patterns::nativeColumns(settings);
       if (need > g) g = need;
-      if (maxCols < g) g = maxCols < 4 ? 4 : maxCols;
+      if (g > 255) g = 255;
       gateStepsLatched = g;
     }
     gateValid = true;
@@ -181,8 +182,12 @@ void PovRenderer::render() {
   const uint8_t halfP = persistence >> 1;
   const float angStep = TWO_PI_F / gateSteps;
 
+  // Inhalt an der Spalten-Mitte rendern, nicht am verrauschten Momentanwinkel
+  // -> Sensorrauschen verzerrt das Bild nicht mehr, es steht innerlich starr.
+  const float thetaColumn = (TWO_PI_F * nextColumn) / gateSteps;
+
   for (uint8_t p = 0; p < persistence; p++) {
-    const float th = angle + (static_cast<int>(p) - static_cast<int>(halfP)) * angStep;
+    const float th = thetaColumn + (static_cast<int>(p) - static_cast<int>(halfP)) * angStep;
     Patterns::render(scratch, settings, th, custCol, custColumns, animMs);
     for (uint16_t j = 0; j < NUM_LEDS; j++) {
       if (scratch[j].r > leds[j].r) leds[j].r = scratch[j].r;
@@ -230,6 +235,58 @@ void PovRenderer::renderWand() {
   const float shake = sensor.wandShake();
   WandPatterns::render(leds, settings.wandPattern, dt, energy, swing, tilt, shake);
   ledController.show();
+}
+
+void PovRenderer::renderTimed() {
+  // Spalten mit fester Taktung (maxColumnHoldUs je Spalte) ohne Sensor.
+  const uint32_t now = micros();
+  if (now - lastShowAt < settings.maxColumnHoldUs) return;
+  lastShowAt = now;
+
+  CRGB* leds = ledController.buffer();
+
+  uint16_t nCols = settings.povColumns;
+  const uint16_t need = Patterns::nativeColumns(settings);
+  if (need > nCols) nCols = need;
+  if (nCols > 255) nCols = 255;
+  if (nCols < 1) nCols = 1;
+  effectiveCols = static_cast<uint8_t>(nCols);
+
+  uint16_t col = (currentColumn == 0xFFFF) ? 0 : static_cast<uint16_t>(currentColumn) + 1;
+  if (col >= nCols) col = 0;
+  if (col == 0) animMs = millis();   // Umlauf -> Animationszeit nachziehen
+  currentColumn = col;
+
+  if (settings.motionBlur > 0) fadeToBlackBy(leds, NUM_LEDS, settings.motionBlur);
+  else fill_solid(leds, NUM_LEDS, CRGB::Black);
+
+  const uint8_t custColumns = static_cast<uint8_t>(nCols);
+  const uint8_t custCol = static_cast<uint8_t>(col);
+  const float thetaColumn = (TWO_PI_F * col) / nCols;
+  const uint8_t persistence = settings.angularPersistence;
+  const uint8_t halfP = persistence >> 1;
+  const float angStep = TWO_PI_F / nCols;
+
+  for (uint8_t p = 0; p < persistence; p++) {
+    const float th = thetaColumn + (static_cast<int>(p) - static_cast<int>(halfP)) * angStep;
+    Patterns::render(scratch, settings, th, custCol, custColumns, animMs);
+    for (uint16_t j = 0; j < NUM_LEDS; j++) {
+      if (scratch[j].r > leds[j].r) leds[j].r = scratch[j].r;
+      if (scratch[j].g > leds[j].g) leds[j].g = scratch[j].g;
+      if (scratch[j].b > leds[j].b) leds[j].b = scratch[j].b;
+    }
+  }
+
+  ledController.show();
+
+  outputCounter++;
+  const uint32_t rateNow = millis();
+  const uint32_t elapsed = rateNow - lastOutputRateAt;
+  if (elapsed >= 1000) {
+    outputRate = outputCounter * 1000UL / elapsed;
+    outputCounter = 0;
+    lastOutputRateAt = rateNow;
+  }
 }
 
 bool PovRenderer::isRotationActive() const { return sensor.isRotating(); }

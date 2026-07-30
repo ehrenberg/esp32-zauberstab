@@ -118,6 +118,7 @@ String WebInterface::stateJson() {
   j += ",\"iscale\":" + String(settings.imageScale);
   j += ",\"wmode\":" + String(settings.wandMode ? 1 : 0);
   j += ",\"wpat\":" + String(settings.wandPattern);
+  j += ",\"tmode\":" + String(settings.timeMode ? 1 : 0);
   j += "}";
 
   j += ",\"patterns\":[";
@@ -206,6 +207,7 @@ void WebInterface::handleSettings() {
   if (server.hasArg("iscale")) settings.imageScale = server.arg("iscale").toInt();
   if (server.hasArg("wmode")) settings.wandMode = server.arg("wmode").toInt() != 0;
   if (server.hasArg("wpat")) settings.wandPattern = server.arg("wpat").toInt();
+  if (server.hasArg("tmode")) settings.timeMode = server.arg("tmode").toInt() != 0;
 
   clampSettings(settings);
   saveSettings(settings);

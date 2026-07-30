@@ -11,6 +11,7 @@ struct Settings {
   uint16_t maxColumnHoldUs = 6000;
   uint8_t motionBlur = 0;
   uint8_t angularPersistence = 1;
+  bool timeMode = false;   // Zeit-Modus: Spalten mit fester Taktung, Sensor ignoriert
   bool invertDirection = false;
   uint8_t gyroAxis = 1;       // 0 = X, 1 = Y, 2 = Z
   bool phaseLock = false;     // Schwerkraft-Lock saettigt ab ~2,4 U/s -> aus, reines Gyro ist kohaerenter

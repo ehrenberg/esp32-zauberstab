@@ -40,6 +40,8 @@ public:
 private:
   // Stab-Modus: lineares Lichtspiel statt POV, mit fester Bildrate.
   void renderWand();
+  // Zeit-Modus: Spalten mit fester Taktung, ohne Sensor (Open-Loop).
+  void renderTimed();
 
   Settings& settings;
   LedController& ledController;

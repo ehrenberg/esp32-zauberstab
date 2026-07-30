@@ -22,11 +22,7 @@ inline uint8_t hueWheel(float a) {
   return static_cast<uint8_t>(f * 256.0f) & 0xFF;
 }
 
-// Deterministischer Hash aus drei Zahlen (LED-Index, Spalte, Zeit-/Zufalls-Bucket).
-// Kern aller Partikel-Muster: statt eine Form zu zeichnen, wird jeder Bildpunkt
-// pseudo-zufaellig an- oder ausgeknipst. Das ist drift-unempfindlich (jede
-// Spalte ist unabhaengig) und laesst jeden leuchtenden Punkt in voller Helligkeit
-// stehen - genau das, was sich am wackeligen Prototyp klar sehen laesst.
+// Deterministischer Hash (LED-Index, Spalte, Zeit-Bucket) - Kern der Partikel-Muster.
 inline uint32_t rng(uint32_t a, uint32_t b, uint32_t d) {
   uint32_t h = a * 2654435761u ^ b * 2246822519u ^ d * 3266489917u;
   h ^= h >> 13; h *= 3266489917u; h ^= h >> 16;
@@ -43,9 +39,7 @@ inline void blendMax(CRGB& dst, const CRGB& src) {
   if (src.b > dst.b) dst.b = src.b;
 }
 
-// Bildraum je LED: X,Y kartesisch (~[-1,1]), R Abstand zum Bildzentrum. Vollkreis:
-// (X,Y)=(r*cosθ, r*sinθ), R=r. Positioniert: Ursprung verschoben/skaliert.
-// t = einmal pro Umdrehung gelatchte Animationszeit (sonst schert das Bild).
+// Bildraum je LED: X,Y kartesisch ~[-1,1], R Abstand zum Zentrum, t = Zeit (s).
 struct Ctx {
   const float* X;
   const float* Y;
@@ -53,10 +47,7 @@ struct Ctx {
   float t;
   uint8_t column;
   uint8_t columns;
-  // Drehwinkel der ganzen Spalte. Vollkreis: fuer alle LEDs gleich -> kein
-  // per-LED-atan2f noetig (spart Rechenzeit = mehr Spalten). Nur positioniert
-  // weicht der Winkel je LED ab.
-  float theta;
+  float theta;      // Spaltenwinkel (Vollkreis: fuer alle LEDs gleich -> kein atan2f)
   bool positioned;
 };
 
@@ -64,16 +55,9 @@ inline float angleAt(const Ctx& c, uint16_t i) {
   return c.positioned ? atan2f(c.Y[i], c.X[i]) : c.theta;
 }
 
-// ============================================================================
-//  Partikel-POV-Set. Leitlinie (aus der Praxis am Prototyp): KEINE Flaechen und
-//  keine stehenden Vollbilder - die verwaschen beim Handschleudern und werden vom
-//  Stromlimit gedimmt. Stattdessen viele HELLE Einzelpunkte auf tiefem Schwarz,
-//  volle Helligkeit, jede Spalte unabhaengig zufaellig. Das steht drift-fest und
-//  kontrastreich in der Luft - so wie "Funken", nur reicher und abwechslungsreicher.
-// ============================================================================
+// Partikel-POV-Set: viele helle Einzelpunkte auf Schwarz, jede Spalte unabhaengig.
 
-// 0 Funken: spaerliche, sehr helle Funken auf Schwarz, enge Farbfamilie. Der
-// Referenz-Effekt - klar und lebendig am Prototyp.
+// 0 Funken: spaerliche helle Funken, enge Farbfamilie.
 void pSparkle(CRGB* leds, const Ctx& c) {
   const uint32_t bucket = static_cast<uint32_t>(c.t * 11.0f);
   const uint8_t baseHue = static_cast<uint8_t>(c.t * 30.0f);
@@ -84,8 +68,7 @@ void pSparkle(CRGB* leds, const Ctx& c) {
   }
 }
 
-// 1 Konfetti: wie Funken, aber jeder Funke eine kraeftige Vollfarbe und etwas
-// dichter - ein sprudelndes, buntes Funkeln.
+// 1 Konfetti: wie Funken, aber jeder Funke eine kraeftige Zufallsfarbe.
 void pConfetti(CRGB* leds, const Ctx& c) {
   const uint32_t bucket = static_cast<uint32_t>(c.t * 9.0f);
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
@@ -95,8 +78,7 @@ void pConfetti(CRGB* leds, const Ctx& c) {
   }
 }
 
-// 2 Regen: pro Spalte faellt ein heller Tropfen mit ausklingendem Schweif nach
-// aussen - ueber alle Spalten ergibt das einen shimmernden Matrix-Regen.
+// 2 Regen: pro Spalte ein fallender Tropfen mit Schweif -> Matrix-Regen.
 void pRain(CRGB* leds, const Ctx& c) {
   const uint32_t hc = rng(c.column, 777u, 3u);
   const float speed = 0.30f + (hc & 0xFF) * (1.0f / 255.0f) * 0.55f;  // R-Einheiten/s
@@ -115,8 +97,7 @@ void pRain(CRGB* leds, const Ctx& c) {
   }
 }
 
-// 3 Feuer: flackernde Glut, heiss am Zentrum (Drehachse) und nach aussen stiebend.
-// Farbe von Dunkelrot ueber Orange nach Gelb je nach Hitze. Flaechig (isHeavy).
+// 3 Feuer: flackernde Glut, heiss am Zentrum, Rot->Gelb je Hitze. Flaechig (isHeavy).
 void pFire(CRGB* leds, const Ctx& c) {
   const uint32_t bucket = static_cast<uint32_t>(c.t * 20.0f);   // schnelles Flackern
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
@@ -132,8 +113,7 @@ void pFire(CRGB* leds, const Ctx& c) {
   }
 }
 
-// 4 Meteore: einige sehr helle Sternschnuppen mit Schweif schiessen radial nach
-// aussen - spaerlich und dadurch aufregend, uebersteht auch etwas Drift.
+// 4 Meteore: wenige helle Sternschnuppen mit Schweif schiessen radial nach aussen.
 void pMeteors(CRGB* leds, const Ctx& c) {
   constexpr uint8_t K = 5;
   const float W = 0.13f;    // Winkelhalbbreite
@@ -159,8 +139,7 @@ void pMeteors(CRGB* leds, const Ctx& c) {
   }
 }
 
-// 5 Plasma: dichteres Funkeln, dessen Farben aus einem langsam fliessenden Feld
-// (Radius + Winkel + Zeit) kommen - ein lebendiger, farbwandernder Schimmer.
+// 5 Plasma: dichteres Funkeln, Farben aus einem fliessenden Feld (Radius+Winkel+Zeit).
 void pPlasma(CRGB* leds, const Ctx& c) {
   const uint32_t bucket = static_cast<uint32_t>(c.t * 10.0f);
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
@@ -171,8 +150,7 @@ void pPlasma(CRGB* leds, const Ctx& c) {
   }
 }
 
-// 6 Sterne: ein ruhig funkelnder Sternenhimmel - eine feste, spaerliche Auswahl
-// LEDs blendet weich in kuehlem Weissblau auf und ab. Eleganter als hartes Funkeln.
+// 6 Sterne: ruhiger Sternenhimmel, feste LED-Auswahl blendet weich weissblau auf/ab.
 void pStars(CRGB* leds, const Ctx& c) {
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     const uint32_t h = rng(i, c.column, 5u);                    // feste Sternauswahl (stabil je Umlauf)
@@ -185,8 +163,7 @@ void pStars(CRGB* leds, const Ctx& c) {
   }
 }
 
-// 7 Blitze: nur ab und zu blitzt eine ganze Spalte als greller, fast weisser
-// Strich an zufaelliger Stelle auf - ein hartes, unregelmaessiges Gewitter-Strobe.
+// 7 Blitze: selten blitzt eine ganze Spalte als greller Strich an Zufallsstelle auf.
 void pFlash(CRGB* leds, const Ctx& c) {
   const uint32_t bucket = static_cast<uint32_t>(c.t * 13.0f);
   const uint32_t hc = rng(c.column, bucket, 99u);
@@ -204,8 +181,7 @@ void pFlash(CRGB* leds, const Ctx& c) {
   }
 }
 
-// 8 Wirbel: helle Funken sitzen nur entlang einer langsam drehenden Doppelspirale
-// - ein funkelnder Strudel, der auch bei etwas Drift als Spirale lesbar bleibt.
+// 8 Wirbel: helle Funken nur entlang einer langsam drehenden Doppelspirale.
 void pSwirl(CRGB* leds, const Ctx& c) {
   constexpr uint8_t N = 2;
   const float twist = 4.0f;

@@ -144,7 +144,10 @@ nav .ic{font-size:21px;line-height:1}
 <label class="row"><span>Lichtspiel</span><select id="wpat" onchange="App.saveSet('wpat',this.value)"></select></label>
 <p class="hint">Ohne Drehen: der Stab macht in der Hand bewegungsreaktive Lichtspiele. Wedeln, Neigen und Schuetteln steuern Tempo, Farbe und Fuellung. Im laufenden Betrieb blaettert der Taster durch die Lichtspiele. Zum Aufhaengen als POV-Bild diesen Schalter wieder aus.</p>
 </div>
-<div class="card"><h2>Anzeige</h2><div id="setA"></div></div>
+<div class="card"><h2>Anzeige</h2><div id="setA"></div>
+<label class="row"><span>Zeit-Modus (ohne Sensor) <i class="info" onclick="App.info('tmode')">i</i></span><span class="sw"><input type="checkbox" id="tmode" onchange="App.saveSet('tmode',this.checked?1:0)"><i></i></span></label>
+<p class="hint">Spalten laufen mit fester Taktung ("Halten µs" = Dauer je Spalte), der Sensor wird ignoriert. Das Bild steht innerlich völlig ruhig, dreht sich aber frei – die Drehzahl von Hand darauf einpendeln.</p>
+</div>
 <div class="card"><h2>Bild im Kreis</h2>
 <label class="row"><span>Bild oben (statt Vollkreis) <i class="info" onclick="App.info('imode')">i</i></span><span class="sw"><input type="checkbox" id="imode" onchange="App.saveSet('imode',this.checked?1:0)"><i></i></span></label>
 <div id="setImg"></div>
@@ -246,6 +249,7 @@ const App={
   document.getElementById('again').checked=!!s.again;
   document.getElementById('imode').checked=!!s.imode;
   document.getElementById('wmode').checked=!!s.wmode;
+  document.getElementById('tmode').checked=!!s.tmode;
   const wp=document.getElementById('wpat');if(wp&&s.wpat!==undefined)wp.value=s.wpat;
   document.getElementById('txt').value=this.st.text;},
  async pick(mode,index){this.st.patternMode=mode;if(mode==0)this.st.pattern=index;
@@ -389,7 +393,8 @@ const App={
   blur:['Nachleuchten','Laesst vorherige Frames langsam ausblenden (Bewegungsspur). 0 = gestochen scharf, hoeher = weicher Schweif.'],
   persist:['Winkelbreite','Verbreitert das Bild um zusaetzliche Winkelschritte. 1 = duennste Darstellung.'],
   current:['Stromlimit (mA)','Begrenzt den maximalen LED-Gesamtstrom - schuetzt Akku/Netzteil und haelt Farben/Spannung stabil.'],
-  holdus:['Halten (us)','Wie lange eine Spalte maximal stehen bleibt, bevor neu gezeichnet wird.'],
+  holdus:['Halten (us)','Sensor-Modus: wie lange eine Spalte maximal stehen bleibt, bevor neu gezeichnet wird. Zeit-Modus: feste Dauer JEDER Spalte - kleiner = schnelleres Durchlaufen, dann schneller drehen.'],
+  tmode:['Zeit-Modus','Open-Loop wie einfache POV-Staebe: die Spalten laufen mit fester Taktung durch, der Gyro wird ignoriert. Das Bild ist dadurch innerlich absolut ruhig, dreht sich aber frei im Kreis - die Drehgeschwindigkeit von Hand darauf einpendeln. Liest es sich hier sauberer als im Sensor-Modus, liegt die Unruhe am Sensorpfad.'],
   gain:['Angle Gain','Skalierung der Winkelmessung. 1,000 = Standard (1 Messung = 1 echte Umdrehung). Zu hoch -> Bild erscheint mehrfach. Hiermit trimmst du die Drift weg.'],
   threshold:['Gyro-Schwelle','Ab welcher Drehgeschwindigkeit (rad/s) die Anzeige startet.'],
   iang:['Bildwinkel','Position des stehenden Bildes auf dem Kreis (0-359 Grad). Damit schiebst du es nach oben.'],

@@ -50,6 +50,7 @@ void loadSettings(Settings& settings) {
   settings.maxColumnHoldUs = preferences.getUShort("holdus", settings.maxColumnHoldUs);
   settings.motionBlur = preferences.getUChar("blur", settings.motionBlur);
   settings.angularPersistence = preferences.getUChar("persist", settings.angularPersistence);
+  settings.timeMode = preferences.getBool("tmode", settings.timeMode);
   settings.invertDirection = preferences.getBool("invert", settings.invertDirection);
   settings.gyroAxis = preferences.getUChar("axis", settings.gyroAxis);
   settings.phaseLock = preferences.getBool("plock", settings.phaseLock);
@@ -117,6 +118,7 @@ void saveSettings(const Settings& settings) {
   preferences.putUShort("holdus", settings.maxColumnHoldUs);
   preferences.putUChar("blur", settings.motionBlur);
   preferences.putUChar("persist", settings.angularPersistence);
+  preferences.putBool("tmode", settings.timeMode);
   preferences.putBool("invert", settings.invertDirection);
   preferences.putUChar("axis", settings.gyroAxis);
   preferences.putBool("plock", settings.phaseLock);
