@@ -91,7 +91,8 @@ Neben POV gibt es den **Stab-Modus**: der Stab wird *nicht* geschleudert, sonder
 der Hand gehalten und geführt. Statt eines Luftbildes laufen dann bewegungsreaktive
 Lichtspiele direkt über den Streifen — ideal zum ruhigen Spielen oder als Glowstick.
 Einschalten im Reiter **Setup → Stab-Modus**, das Lichtspiel dort per Auswahl oder im
-laufenden Betrieb per Taster wechseln.
+laufenden Betrieb per Taster wechseln. Nach dem Einschalten startet der Stab immer im
+Dreh-Modus (POV) — der Stab-Modus ist der zweite und wird per Taster (2 s) oder Setup aktiviert.
 
 Die acht Lichtspiele sind bewusst *kinetisch* — wenige helle Punkte in Bewegung statt
 flächiger Füllungen — und reagieren auf Wedeln, Neigen und Schütteln:

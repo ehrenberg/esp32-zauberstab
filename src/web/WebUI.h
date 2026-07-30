@@ -169,6 +169,8 @@ nav .ic{font-size:21px;line-height:1}
 <div class="card"><h2>Betrieb</h2>
 <div class="btnrow"><button class="btn ok" onclick="App.run(1)">Display starten</button><button class="btn warn" onclick="App.run(0)">Stop</button></div>
 <p class="hint" style="margin-top:12px">Beim Start wird das WLAN getrennt (maximale POV-Leistung). Zurück ins Setup: Taster lang drücken.</p>
+<button class="btn sec" style="margin-top:12px" onclick="App.resetDefaults()">Einstellungen zurücksetzen</button>
+<p class="hint" style="margin-top:10px">Setzt alle Regler und Schalter auf die Standardwerte zurück. Zeichnungen, Fotos und Text bleiben erhalten.</p>
 </div>
 </section>
 
@@ -265,10 +267,11 @@ const App={
   document.getElementById('txt').value=this.st.text;},
  async pick(mode,index){this.st.patternMode=mode;if(mode==0)this.st.pattern=index;
   this.markTiles();  // sofort hervorheben - nicht auf Server-Roundtrip + Vorschau warten
-  await this.j('/api/select?mode='+mode+'&index='+index,{method:'POST'});this.refresh();},
+  await this.j('/api/select?mode='+mode+'&index='+index,{method:'POST'});this.refreshSoon();},
  async saveSet(k,v){const b=new URLSearchParams();b.set(k,v);
   // fill() zieht die Regler nach: clampSettings() kann den Wert korrigiert haben.
-  this.st=await this.j('/api/settings',{method:'POST',body:b});this.fill();this.refresh();},
+  // Vorschau nur gebuendelt neu rendern (das ist der teure, synchrone ESP-Aufruf).
+  this.st=await this.j('/api/settings',{method:'POST',body:b});this.fill();this.refreshSoon();},
  // Ohne Phase-Lock hat die Regelung keinen absoluten Winkelbezug und tut nichts.
  async setAutoGain(on){
   if(on&&!this.st.settings.plock){
@@ -278,6 +281,8 @@ const App={
   await this.saveSet('again',on?1:0);},
  async calibrate(){if(!confirm('Sensor neu kalibrieren?\n\nStab dabei ruhig und still halten.'))return;
   await fetch('/api/calibrate',{method:'POST'});this.flash('Kalibriere…');},
+ async resetDefaults(){if(!confirm('Alle Einstellungen auf Standard zurücksetzen?\n\nZeichnungen, Fotos und Text bleiben erhalten.'))return;
+  this.st=await this.j('/api/reset',{method:'POST'});this.fill();this.markTiles();this.refresh();this.flash('Zurückgesetzt');},
  // ---- Vorschau ----
  previewSoon(){clearTimeout(this._pt);this._pt=setTimeout(()=>this.textApply(),500);},
  // Animierte Muster als Daumenkino: bewusst opt-in, jeder Frame sind ~21 KB
@@ -297,6 +302,9 @@ const App={
     f.span<6.2?f.cols+' Schritte über '+deg+'° · Bildfenster':f.cols+' Spalten · Vollkreis';}
   catch(e){}
   finally{this._busy=false;}},
+ // Vorschau gebuendelt: die synchrone ESP-Renderung soll nicht bei jeder
+ // Regleraenderung sofort feuern (das machte die UI traege).
+ refreshSoon(){clearTimeout(this._rst);this._rst=setTimeout(()=>this.refresh(),250);},
  // Jede Spalte ist ein Kreissegment, kein Punkt: bei 46 Spalten liegen am
  // Aussenrand ~17 px zwischen zwei Spalten - gezeichnete Punkte hinterlassen
  // dort Luecken und das Muster zerfaellt zu Konfetti. Gleichfarbige LEDs

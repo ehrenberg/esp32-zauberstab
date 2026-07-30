@@ -59,6 +59,7 @@ void WebInterface::routes() {
   server.on("/api/clear", HTTP_POST, [this]() { handleClear(); });
   server.on("/api/frame", [this]() { handleFrame(); });
   server.on("/api/calibrate", HTTP_POST, [this]() { handleCalibrate(); });
+  server.on("/api/reset", HTTP_POST, [this]() { handleReset(); });
   server.on("/api/start", HTTP_POST, [this]() { handleStart(); });
   server.on("/api/stop", HTTP_POST, [this]() { handleStop(); });
   server.onNotFound([this]() { server.send_P(200, "text/html", INDEX_HTML); });
@@ -302,6 +303,7 @@ void WebInterface::handleFrame() {
     a0 = settings.imageAngleDeg * (TWO_PI_F / 360.0f) - span * 0.5f;
     cols = PREVIEW_FINE_COLS;
   }
+  if (!positioned && cols > 96) cols = 96;   // Vorschau ist ein Thumbnail - Spalten deckeln
   if (cols > PREVIEW_MAX_COLS) cols = PREVIEW_MAX_COLS;
 
   // Eine Zeit fuer den ganzen Frame - sonst zeigt die Vorschau ein in sich
@@ -345,6 +347,16 @@ void WebInterface::handleFrame() {
 void WebInterface::handleCalibrate() {
   renderer.requestCalibration();
   server.send(200, "application/json", "{\"ok\":1}");
+}
+
+void WebInterface::handleReset() {
+  // Alle Einstellungen auf die Struct-Defaults zuruecksetzen (Zeichnungen, Fotos
+  // und Text bleiben - die liegen in eigenen Stores, nicht in Settings).
+  settings = Settings();
+  clampSettings(settings);
+  saveSettings(settings);
+  leds.apply(settings);
+  server.send(200, "application/json", stateJson());
 }
 
 void WebInterface::handleStart() {

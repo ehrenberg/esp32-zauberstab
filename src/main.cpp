@@ -38,6 +38,7 @@ void setup() {
 
   button.begin();
   loadSettings(settings);
+  settings.wandMode = false;  // Start immer im Dreh-Modus (POV); Stab-Modus ist der zweite
   PatternStore::begin(settings.customSlot);
   PhotoStore::begin();
 #if POV_DEBUG_SERIAL

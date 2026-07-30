@@ -42,6 +42,7 @@ private:
   void handleClear();
   void handleFrame();
   void handleCalibrate();
+  void handleReset();
   void handleStart();
   void handleStop();
 
