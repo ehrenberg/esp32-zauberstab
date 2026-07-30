@@ -99,7 +99,7 @@ inline CRGB nyanColor(char ch) {
 inline char sampleChar(const char* const* rows, uint8_t W, uint8_t H,
                        float x, float y, float hx, float hy) {
   if (x < -hx || x > hx || y < -hy || y > hy) return ' ';
-  int u = static_cast<int>((x + hx) / (2.0f * hx) * W);
+  int u = static_cast<int>((hx - x) / (2.0f * hx) * W);   // horizontal gespiegelt (Leserichtung)
   int v = static_cast<int>((hy - y) / (2.0f * hy) * H);
   if (u < 0) u = 0; else if (u >= W) u = W - 1;
   if (v < 0) v = 0; else if (v >= H) v = H - 1;
@@ -256,7 +256,7 @@ void pAntifa(CRGB* leds, const Ctx& c) {
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     const float x = c.X[i], y = c.Y[i];
     if (x < -hx || x > hx || y < -hy || y > hy) { leds[i] = CRGB::Black; continue; }
-    const int u = static_cast<int>((x + hx) / (2.0f * hx) * 35.0f);
+    const int u = static_cast<int>((hx - x) / (2.0f * hx) * 35.0f);   // horizontal gespiegelt (Leserichtung)
     const int v = static_cast<int>((hy - y) / (2.0f * hy) * 7.0f);
     if (u < 0 || u > 34 || v < 0 || v > 6) { leds[i] = CRGB::Black; continue; }
     const int letter = u / 6, lx = u % 6;                              // 6 = 5 Glyph + 1 Luecke
