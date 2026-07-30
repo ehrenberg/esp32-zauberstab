@@ -125,7 +125,7 @@ constexpr uint32_t SENSOR_SERIAL_INTERVAL_US = 50000;
 constexpr uint16_t CALIB_SAMPLES = 1500;
 
 // ---- Muster-System -------------------------------------------------------
-constexpr uint8_t PATTERN_BUILTIN_COUNT = 9;    // eingebaute Muster (helle Partikel-Effekte)
+constexpr uint8_t PATTERN_BUILTIN_COUNT = 10;   // eingebaute Muster (Bild-POV-Set)
 // Stab-Modus: der Stab wird NICHT gedreht, sondern in der Hand gehalten. Der
 // 65-LED-Streifen laeuft dann als lineares, bewegungsreaktives Lichtspiel statt
 // als POV-Bild. Diese Effekte liegen in WandPatterns - kinetische Spielereien

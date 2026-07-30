@@ -56,12 +56,11 @@ Im Setup-Modus spannt der Stab einen WLAN-Accesspoint auf:
 
 Beim Verbinden blinkt der Stab zweimal cyan. Die Oberfläche hat sechs Reiter:
 
-- **Muster** — 9 eingebaute Partikel-Effekte mit Rundvorschau: *Funken, Konfetti, Regen,
-  Feuer, Meteore, Plasma, Sterne, Blitze, Wirbel*. Bewusst **viele helle Einzelpunkte auf
-  tiefem Schwarz** in voller Helligkeit statt stehender Vollbilder — das steht am
-  handgeschleuderten Stab drift-fest und kontrastreich in der Luft, während flächige oder
-  fein-geometrische Bilder verwaschen und vom Stromlimit gedimmt werden. (`⚡` markiert
-  *Feuer*, das flächiger leuchtet und das Stromlimit global herunterdimmen kann.)
+- **Muster** — 10 eingebaute Motive mit Rundvorschau: *Funken, Stern, Herzen, Nyan Cat,
+  Strichmänner, Feuerstrahlen, Smiley, Peace, ANTIFA, Spirale*. Erkennbare Figuren im
+  kartesischen Bildraum. (`⚡` markiert die flächig gefüllten *Stern, Nyan Cat* und *Smiley*,
+  die das Stromlimit global herunterdimmen können.) Breite Motive (ANTIFA, Nyan Cat) lesen
+  sich im Vollkreis am besten, runde (Stern, Smiley, Peace, Herzen) auch im Bild-Modus.
 - **Malen** — vier Zeichen-Slots, 48 × 65 Pixel, 16-Farben-Palette.
 - **Text** — bis 32 Zeichen, 5×7-Font (Großbuchstaben, Ziffern, `. ! ? - :`).
 - **Foto** — vier Foto-Slots. Das Bild wird im Browser rund zugeschnitten und in ein
@@ -173,7 +172,7 @@ MPU6050 ──► MotionSensor ──► PovRenderer ──► Patterns ──�
 | `config.h` | Pins, Sensorregister, Timing — dokumentiert die Messungen hinter den Werten |
 | `MotionSensor` | Gyro-Integration zum Drehwinkel, Phase-Lock, Telemetrie |
 | `PovRenderer` | Winkelquantisierung, adaptive Spaltenzahl, Bildfenster, Stab-Modus |
-| `Patterns` | 9 eingebaute Partikel-Effekte im kartesischen Bildraum |
+| `Patterns` | 10 eingebaute Motive im kartesischen Bildraum |
 | `WandPatterns` | 8 kinetische Lichtspiele für den Stab-Modus (linear, kein POV) |
 | `PatternStore` | Zeichen-Slots und Text-Font (NVS) |
 | `PhotoStore` | Foto-Slots als RGB565-Polarbilder (LittleFS) |
