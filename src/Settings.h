@@ -14,6 +14,7 @@ struct Settings {
   bool invertDirection = false;
   uint8_t gyroAxis = 1;       // 0 = X, 1 = Y, 2 = Z
   bool phaseLock = false;     // Schwerkraft-Lock saettigt ab ~2,4 U/s -> aus, reines Gyro ist kohaerenter
+  bool autoGain = false;      // angleGain aus den Phase-Lock-Fehlern selbst einregeln (braucht phaseLock)
 
   // Musterauswahl
   uint8_t patternMode = PATTERN_MODE_BUILTIN;  // 0 builtin, 1 custom, 2 text
@@ -27,6 +28,11 @@ struct Settings {
   uint16_t imageAngleDeg = 270;   // Winkelposition des Bildzentrums (oben justieren)
   uint8_t imageRadius = 55;       // Abstand Bildzentrum vom Scheibenzentrum (%)
   uint8_t imageScale = 40;        // Bildgroesse (%)
+
+  // Stab-Modus: Stab wird nicht gedreht, sondern gehalten. Der Streifen laeuft
+  // dann als lineares, bewegungsreaktives Lichtspiel (WandPatterns) statt als POV.
+  bool wandMode = false;          // true: Stab-Modus statt POV
+  uint8_t wandPattern = 0;        // ausgewaehlter Stab-Effekt
 };
 
 void clampSettings(Settings& settings);

@@ -9,16 +9,19 @@ void clampSettings(Settings& settings) {
   // Strip, sondern durch die Winkelaufloesung begrenzt. Der Renderer drosselt
   // bei niedriger Drehzahl ohnehin adaptiv herunter. Die alte 64er-Grenze stammte
   // vom WS2812B und war zu niedrig fuer Text (bis 192 Spalten) und Fotos (72).
-  if (settings.povColumns > 192) settings.povColumns = 192;
+  // Obergrenze der POV-Spalten ist der uint8_t-Bereich (255) - der Renderer und
+  // der Custom-/Text-Spaltenindex sind ohnehin auf 255 gedeckelt.
   if (settings.brightness < 1) settings.brightness = 1;
   if (settings.brightness > 100) settings.brightness = 100;
   if (settings.currentLimitMa < 300) settings.currentLimitMa = 300;
-  if (settings.currentLimitMa > 3000) settings.currentLimitMa = 3000;
+  if (settings.currentLimitMa > 2000) settings.currentLimitMa = 2000;
+  // angleGain-Clamp bleibt bewusst weit (0,2-3,0): die Auto-Gain-Regelung darf
+  // ausserhalb des manuellen UI-Fensters (0,5-1,5) einregeln, ohne beschnitten zu werden.
   if (settings.angleGain < 0.2f) settings.angleGain = 0.2f;
   if (settings.angleGain > 3.0f) settings.angleGain = 3.0f;
-  if (settings.maxColumnHoldUs < 2000) settings.maxColumnHoldUs = 2000;
-  if (settings.maxColumnHoldUs > 30000) settings.maxColumnHoldUs = 30000;
-  if (settings.motionBlur > 250) settings.motionBlur = 250;
+  if (settings.maxColumnHoldUs < 200) settings.maxColumnHoldUs = 200;
+  if (settings.maxColumnHoldUs > 15000) settings.maxColumnHoldUs = 15000;
+  if (settings.motionBlur > 50) settings.motionBlur = 50;
   if (settings.angularPersistence < 1) settings.angularPersistence = 1;
   if (settings.angularPersistence > 9) settings.angularPersistence = 9;
   if (settings.gyroAxis > 2) settings.gyroAxis = 1;
@@ -29,8 +32,11 @@ void clampSettings(Settings& settings) {
   if (settings.textColor >= PALETTE_SIZE) settings.textColor = 2;
   if (settings.imageAngleDeg > 359) settings.imageAngleDeg %= 360;
   if (settings.imageRadius > 100) settings.imageRadius = 100;
-  if (settings.imageScale < 5) settings.imageScale = 5;
+  // Unter ~15 % ist das Bild schmaler als etwa 19 LED-Abstaende - Formen lassen
+  // sich dann nicht mehr aufloesen, egal wie fein die Winkelschritte sind.
+  if (settings.imageScale < 15) settings.imageScale = 15;
   if (settings.imageScale > 100) settings.imageScale = 100;
+  if (settings.wandPattern >= WAND_PATTERN_COUNT) settings.wandPattern = 0;
 }
 
 void loadSettings(Settings& settings) {
@@ -47,6 +53,7 @@ void loadSettings(Settings& settings) {
   settings.invertDirection = preferences.getBool("invert", settings.invertDirection);
   settings.gyroAxis = preferences.getUChar("axis", settings.gyroAxis);
   settings.phaseLock = preferences.getBool("plock", settings.phaseLock);
+  settings.autoGain = preferences.getBool("again", settings.autoGain);
   settings.patternMode = preferences.getUChar("pmode", settings.patternMode);
   settings.selectedPattern = preferences.getUChar("pattern", settings.selectedPattern);
   settings.customSlot = preferences.getUChar("cslot", settings.customSlot);
@@ -56,6 +63,8 @@ void loadSettings(Settings& settings) {
   settings.imageAngleDeg = preferences.getUShort("iang", settings.imageAngleDeg);
   settings.imageRadius = preferences.getUChar("irad", settings.imageRadius);
   settings.imageScale = preferences.getUChar("iscale", settings.imageScale);
+  settings.wandMode = preferences.getBool("wmode", settings.wandMode);
+  settings.wandPattern = preferences.getUChar("wpat", settings.wandPattern);
   preferences.end();
   clampSettings(settings);
 }
@@ -111,6 +120,7 @@ void saveSettings(const Settings& settings) {
   preferences.putBool("invert", settings.invertDirection);
   preferences.putUChar("axis", settings.gyroAxis);
   preferences.putBool("plock", settings.phaseLock);
+  preferences.putBool("again", settings.autoGain);
   preferences.putUChar("pmode", settings.patternMode);
   preferences.putUChar("pattern", settings.selectedPattern);
   preferences.putUChar("cslot", settings.customSlot);
@@ -120,5 +130,7 @@ void saveSettings(const Settings& settings) {
   preferences.putUShort("iang", settings.imageAngleDeg);
   preferences.putUChar("irad", settings.imageRadius);
   preferences.putUChar("iscale", settings.imageScale);
+  preferences.putBool("wmode", settings.wandMode);
+  preferences.putUChar("wpat", settings.wandPattern);
   preferences.end();
 }

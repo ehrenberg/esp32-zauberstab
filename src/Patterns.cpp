@@ -5,9 +5,8 @@
 
 namespace {
 
-constexpr float LINE_T = 0.03f;  // intrinsische Linienbreite (duenner = schaerfere Striche)
-
 inline float rad(uint16_t i) { return static_cast<float>(i) / (NUM_LEDS - 1); }
+inline float frac(float x) { return x - floorf(x); }
 
 // Winkeldifferenz auf [-PI, PI] falten.
 inline float wrapPi(float a) {
@@ -16,16 +15,37 @@ inline float wrapPi(float a) {
   return a;
 }
 
-// Alle Muster rechnen im Bildraum: X,Y sind kartesische Koordinaten (~[-1,1]),
-// R der Abstand vom Bildzentrum. Im Vollkreis-Modus gilt (X,Y)=(r*cosθ, r*sinθ)
-// und R=r. Im positionierten Modus ("kleines Bild oben") ist der Ursprung ins
-// Bildzentrum verschoben und skaliert, sodass dieselben Musterfunktionen ein
-// kleines, stehendes Bild erzeugen.
-//
-// t ist die Animationszeit in Sekunden. Sie wird vom Renderer einmal pro
-// Umdrehung gelatcht - wuerde jede Spalte ihre eigene Zeit sehen, liefe die
-// Animation innerhalb einer Umdrehung weiter und das Bild wuerde schraeg
-// verzerrt ("geschert") statt sich als Ganzes zu bewegen.
+// Radiant -> Farbton-Byte, faltet beliebige Winkel sauber auf einen Umlauf.
+inline uint8_t hueWheel(float a) {
+  float f = a * (1.0f / TWO_PI_F);
+  f -= floorf(f);
+  return static_cast<uint8_t>(f * 256.0f) & 0xFF;
+}
+
+// Deterministischer Hash aus drei Zahlen (LED-Index, Spalte, Zeit-/Zufalls-Bucket).
+// Kern aller Partikel-Muster: statt eine Form zu zeichnen, wird jeder Bildpunkt
+// pseudo-zufaellig an- oder ausgeknipst. Das ist drift-unempfindlich (jede
+// Spalte ist unabhaengig) und laesst jeden leuchtenden Punkt in voller Helligkeit
+// stehen - genau das, was sich am wackeligen Prototyp klar sehen laesst.
+inline uint32_t rng(uint32_t a, uint32_t b, uint32_t d) {
+  uint32_t h = a * 2654435761u ^ b * 2246822519u ^ d * 3266489917u;
+  h ^= h >> 13; h *= 3266489917u; h ^= h >> 16;
+  return h;
+}
+inline float rngf(uint32_t a, uint32_t b, uint32_t d) {
+  return (rng(a, b, d) & 0xFFFFu) * (1.0f / 65535.0f);
+}
+
+// Max-Blend (fuer sich ueberlagernde Partikel wie mehrere Meteore).
+inline void blendMax(CRGB& dst, const CRGB& src) {
+  if (src.r > dst.r) dst.r = src.r;
+  if (src.g > dst.g) dst.g = src.g;
+  if (src.b > dst.b) dst.b = src.b;
+}
+
+// Bildraum je LED: X,Y kartesisch (~[-1,1]), R Abstand zum Bildzentrum. Vollkreis:
+// (X,Y)=(r*cosθ, r*sinθ), R=r. Positioniert: Ursprung verschoben/skaliert.
+// t = einmal pro Umdrehung gelatchte Animationszeit (sonst schert das Bild).
 struct Ctx {
   const float* X;
   const float* Y;
@@ -33,259 +53,193 @@ struct Ctx {
   float t;
   uint8_t column;
   uint8_t columns;
+  // Drehwinkel der ganzen Spalte. Vollkreis: fuer alle LEDs gleich -> kein
+  // per-LED-atan2f noetig (spart Rechenzeit = mehr Spalten). Nur positioniert
+  // weicht der Winkel je LED ab.
+  float theta;
+  bool positioned;
 };
 
-// ---- Animierte Muster (POV-tauglich: wenige LEDs gleichzeitig hell) --------
+inline float angleAt(const Ctx& c, uint16_t i) {
+  return c.positioned ? atan2f(c.Y[i], c.X[i]) : c.theta;
+}
 
-// Leuchtpunkt kreist mit ausblendendem Schweif - der klassische Poi-Look.
-void pComet(CRGB* leds, const Ctx& c) {
-  const float head = c.t * 2.2f;          // Kopfposition (rad)
-  const float ringR = 0.72f;              // Bahnradius
-  const float tail = 2.6f;                // Schweiflaenge (rad)
-  const uint8_t hue = static_cast<uint8_t>(c.t * 24.0f);
+// ============================================================================
+//  Partikel-POV-Set. Leitlinie (aus der Praxis am Prototyp): KEINE Flaechen und
+//  keine stehenden Vollbilder - die verwaschen beim Handschleudern und werden vom
+//  Stromlimit gedimmt. Stattdessen viele HELLE Einzelpunkte auf tiefem Schwarz,
+//  volle Helligkeit, jede Spalte unabhaengig zufaellig. Das steht drift-fest und
+//  kontrastreich in der Luft - so wie "Funken", nur reicher und abwechslungsreicher.
+// ============================================================================
+
+// 0 Funken: spaerliche, sehr helle Funken auf Schwarz, enge Farbfamilie. Der
+// Referenz-Effekt - klar und lebendig am Prototyp.
+void pSparkle(CRGB* leds, const Ctx& c) {
+  const uint32_t bucket = static_cast<uint32_t>(c.t * 11.0f);
+  const uint8_t baseHue = static_cast<uint8_t>(c.t * 30.0f);
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    const float ang = atan2f(c.Y[i], c.X[i]);
-    float d = head - ang;
-    while (d < 0.0f) d += TWO_PI_F;
-    while (d >= TWO_PI_F) d -= TWO_PI_F;
-    const float radial = fabsf(c.R[i] - ringR);
-    if (d > tail || radial > 0.14f) { leds[i] = CRGB::Black; continue; }
-    float v = (1.0f - d / tail);
-    v *= v * (1.0f - radial / 0.14f);
-    leds[i] = CHSV(hue + static_cast<uint8_t>(d * 14.0f), 230, static_cast<uint8_t>(v * 255.0f));
+    const uint32_t h = rng(i, c.column, bucket);
+    if ((h & 0x1F) != 0) { leds[i] = CRGB::Black; continue; }   // ~1 von 32
+    leds[i] = CHSV(baseHue + static_cast<uint8_t>((h >> 8) & 0x3F), 210, 255);
   }
 }
 
-// Zwei gegenlaeufig verschraubte Straenge - dreht sich langsam mit.
-void pHelix(CRGB* leds, const Ctx& c) {
-  const float twist = 4.0f;
-  const float phase = c.t * 1.8f;
+// 1 Konfetti: wie Funken, aber jeder Funke eine kraeftige Vollfarbe und etwas
+// dichter - ein sprudelndes, buntes Funkeln.
+void pConfetti(CRGB* leds, const Ctx& c) {
+  const uint32_t bucket = static_cast<uint32_t>(c.t * 9.0f);
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
+    const uint32_t h = rng(i, c.column, bucket);
+    if ((h & 0x1F) != 0) { leds[i] = CRGB::Black; continue; }   // ~1 von 32
+    leds[i] = CHSV(static_cast<uint8_t>(h >> 9), 255, 255);      // volle Zufallsfarbe
+  }
+}
+
+// 2 Regen: pro Spalte faellt ein heller Tropfen mit ausklingendem Schweif nach
+// aussen - ueber alle Spalten ergibt das einen shimmernden Matrix-Regen.
+void pRain(CRGB* leds, const Ctx& c) {
+  const uint32_t hc = rng(c.column, 777u, 3u);
+  const float speed = 0.30f + (hc & 0xFF) * (1.0f / 255.0f) * 0.55f;  // R-Einheiten/s
+  const float phase = ((hc >> 8) & 0xFF) * (1.0f / 255.0f);
+  const float head = frac(c.t * speed + phase);                 // Kopf-Radius 0..1
+  const float trail = 0.40f;
+  const uint8_t hue = 112 + static_cast<uint8_t>((hc >> 16) & 0x1F);  // Cyan/Gruen-Familie
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     const float r = c.R[i];
     if (r > 1.0f) { leds[i] = CRGB::Black; continue; }
-    const float ang = atan2f(c.Y[i], c.X[i]);
-    const float base = r * twist + phase;
+    const float d = head - r;                                   // >0: hinter dem Kopf
+    if (d < 0.0f || d > trail) { leds[i] = CRGB::Black; continue; }
+    float v = 1.0f - d / trail;
+    v *= v;                                                      // heller Kopf, schneller Auslauf
+    leds[i] = CHSV(hue, 220, static_cast<uint8_t>(v * 255.0f));
+  }
+}
+
+// 3 Feuer: flackernde Glut, heiss am Zentrum (Drehachse) und nach aussen stiebend.
+// Farbe von Dunkelrot ueber Orange nach Gelb je nach Hitze. Flaechig (isHeavy).
+void pFire(CRGB* leds, const Ctx& c) {
+  const uint32_t bucket = static_cast<uint32_t>(c.t * 20.0f);   // schnelles Flackern
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
+    const float r = c.R[i];
+    if (r > 1.0f) { leds[i] = CRGB::Black; continue; }
+    const float n = rngf(i, c.column, bucket);
+    float heat = (1.0f - r) * (0.35f + 0.65f * n) * 1.7f;       // Zentrum am heissesten
+    if (heat < 0.18f) { leds[i] = CRGB::Black; continue; }
+    if (heat > 1.0f) heat = 1.0f;
+    const uint8_t hue = static_cast<uint8_t>(heat * 40.0f);     // 0 rot .. 40 gelb
+    const uint8_t sat = static_cast<uint8_t>(255 - heat * 60.0f);  // heisse Spitzen weisslicher
+    leds[i] = CHSV(hue, sat, static_cast<uint8_t>(heat * 255.0f));
+  }
+}
+
+// 4 Meteore: einige sehr helle Sternschnuppen mit Schweif schiessen radial nach
+// aussen - spaerlich und dadurch aufregend, uebersteht auch etwas Drift.
+void pMeteors(CRGB* leds, const Ctx& c) {
+  constexpr uint8_t K = 5;
+  const float W = 0.13f;    // Winkelhalbbreite
+  const float tail = 0.45f; // Schweiflaenge (R-Einheiten)
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
+    const float r = c.R[i];
+    if (r > 1.0f) { leds[i] = CRGB::Black; continue; }
+    const float ang = angleAt(c, i);
     CRGB out = CRGB::Black;
-    for (uint8_t k = 0; k < 2; k++) {
-      const float d = fabsf(wrapPi(ang - (base + k * PI_F)));
-      if (d < 0.16f) {
-        const uint8_t v = static_cast<uint8_t>((1.0f - d / 0.16f) * 255.0f);
-        out = CHSV(static_cast<uint8_t>(r * 90.0f + c.t * 20.0f + k * 128), 255, v);
-      }
+    for (uint8_t k = 0; k < K; k++) {
+      const float angK = k * (TWO_PI_F / K) + c.t * 0.12f;
+      const float headR = frac(c.t * 0.75f + k * 0.37f) * 1.3f; // 0..1,3: Luecke = Aufblitzen
+      const float dA = fabsf(wrapPi(ang - angK));
+      if (dA > W) continue;
+      const float along = headR - r;                            // >0: hinter dem Kopf (nach innen)
+      if (along < 0.0f || along > tail) continue;
+      float v = (1.0f - along / tail) * (1.0f - dA / W);
+      v *= v;
+      blendMax(out, CRGB(CHSV(static_cast<uint8_t>(k * 51 + c.t * 8.0f), 255,
+                              static_cast<uint8_t>(v * 255.0f))));
     }
     leds[i] = out;
   }
 }
 
-// Ring, dessen Durchmesser atmet; Farbe wandert durch den Farbkreis.
-void pPulse(CRGB* leds, const Ctx& c) {
-  const float target = 0.40f + 0.34f * sinf(c.t * 2.0f);
-  const uint8_t hue = static_cast<uint8_t>(c.t * 30.0f);
+// 5 Plasma: dichteres Funkeln, dessen Farben aus einem langsam fliessenden Feld
+// (Radius + Winkel + Zeit) kommen - ein lebendiger, farbwandernder Schimmer.
+void pPlasma(CRGB* leds, const Ctx& c) {
+  const uint32_t bucket = static_cast<uint32_t>(c.t * 10.0f);
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    const float d = fabsf(c.R[i] - target);
-    if (d > 0.09f) { leds[i] = CRGB::Black; continue; }
-    leds[i] = CHSV(hue, 255, static_cast<uint8_t>((1.0f - d / 0.09f) * 255.0f));
+    const uint32_t h = rng(i, c.column, bucket);
+    if ((h & 0x0F) != 0) { leds[i] = CRGB::Black; continue; }   // ~1 von 16 (dichter)
+    const float field = sinf(c.R[i] * 4.0f + c.t * 1.3f) + sinf(angleAt(c, i) * 3.0f - c.t * 0.8f);
+    leds[i] = CHSV(hueWheel(field), 255, 255);
   }
 }
 
-// Sechs duenne Speichen, die sich drehen - der stromsparende Ersatz fuers Farbrad.
-void pSpokes(CRGB* leds, const Ctx& c) {
-  constexpr uint8_t N = 6;
-  const float phase = c.t * 1.4f;
+// 6 Sterne: ein ruhig funkelnder Sternenhimmel - eine feste, spaerliche Auswahl
+// LEDs blendet weich in kuehlem Weissblau auf und ab. Eleganter als hartes Funkeln.
+void pStars(CRGB* leds, const Ctx& c) {
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    const float r = c.R[i];
-    if (r > 1.0f || r < 0.12f) { leds[i] = CRGB::Black; continue; }
-    const float seg = TWO_PI_F / N;
-    // Auf [0, N) normieren - atan2f liefert negative Winkel, floorf davon ergaebe
-    // einen negativen Index.
-    float m = (atan2f(c.Y[i], c.X[i]) - phase) / seg;
-    m -= floorf(m / N) * N;                      // m in [0, N)
-    const float frac = m - floorf(m);            // Lage zwischen zwei Speichen
-    // Abstand zur naechstgelegenen Speiche (Speichen liegen bei ganzzahligem m).
-    const float d = (frac < 0.5f ? frac : 1.0f - frac) * seg;
-    if (d > 0.10f) { leds[i] = CRGB::Black; continue; }
-    const uint8_t k = static_cast<uint8_t>(frac < 0.5f ? m : m + 1.0f) % N;
-    leds[i] = CHSV(static_cast<uint8_t>(k * (256 / N)), 255,
-                   static_cast<uint8_t>((1.0f - d / 0.10f) * 255.0f));
+    const uint32_t h = rng(i, c.column, 5u);                    // feste Sternauswahl (stabil je Umlauf)
+    if ((h & 0x0F) >= 2u) { leds[i] = CRGB::Black; continue; }  // ~1 von 8 ist ein Stern
+    const float phase = ((h >> 8) & 0xFF) * (TWO_PI_F / 255.0f);
+    float tw = 0.5f + 0.5f * sinf(c.t * 2.2f + phase);
+    tw *= tw;                                                   // weiches Auf- und Abblenden
+    const uint8_t hue = 150 + static_cast<uint8_t>((h >> 16) & 0x1F);
+    leds[i] = CHSV(hue, 110, static_cast<uint8_t>(tw * 255.0f));
   }
 }
 
-// Zufaellige Funken mit kurzer Standzeit. Sehr wenig Strom, wirkt im Dunkeln stark.
-void pSparkle(CRGB* leds, const Ctx& c) {
-  const uint32_t bucket = static_cast<uint32_t>(c.t * 12.0f);  // ~12 Wechsel/s
-  for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    uint32_t h = (i * 2654435761u) ^ (c.column * 40503u) ^ (bucket * 2246822519u);
-    h ^= h >> 13;
-    h *= 3266489917u;
-    h ^= h >> 16;
-    if ((h & 0x3F) != 0) { leds[i] = CRGB::Black; continue; }  // ~1 von 64
-    leds[i] = CHSV(static_cast<uint8_t>(h >> 8), 200, 255);
-  }
-}
-
-// Radiale Welle, die nach aussen laeuft (schmale helle Kaemme).
-void pWave(CRGB* leds, const Ctx& c) {
-  const uint8_t hue = static_cast<uint8_t>(c.t * 18.0f);
+// 7 Blitze: nur ab und zu blitzt eine ganze Spalte als greller, fast weisser
+// Strich an zufaelliger Stelle auf - ein hartes, unregelmaessiges Gewitter-Strobe.
+void pFlash(CRGB* leds, const Ctx& c) {
+  const uint32_t bucket = static_cast<uint32_t>(c.t * 13.0f);
+  const uint32_t hc = rng(c.column, bucket, 99u);
+  if ((hc & 0x07) != 0u) { fill_solid(leds, NUM_LEDS, CRGB::Black); return; }  // ~1 von 8 Spalten
+  const float center = ((hc >> 8) & 0xFF) * (1.0f / 255.0f);
+  const float len = 0.14f + ((hc >> 16) & 0x3F) * (1.0f / 63.0f) * 0.28f;
+  const uint8_t hue = 150 + static_cast<uint8_t>((hc >> 24) & 0x1F);           // Blauweiss
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     const float r = c.R[i];
     if (r > 1.0f) { leds[i] = CRGB::Black; continue; }
-    float s = sinf(r * 9.0f - c.t * 5.0f);
-    if (s <= 0.0f) { leds[i] = CRGB::Black; continue; }
-    s = s * s;      // schmaler
-    s = s * s * s;  // sehr schmaler Kamm -> duenne Ringe statt Flaeche
-    leds[i] = CHSV(hue + static_cast<uint8_t>(r * 60.0f), 255, static_cast<uint8_t>(s * 255.0f));
+    const float d = fabsf(r - center);
+    if (d > len) { leds[i] = CRGB::Black; continue; }
+    const float v = 1.0f - d / len;
+    leds[i] = CHSV(hue, static_cast<uint8_t>(50 + 60 * (1.0f - v)), static_cast<uint8_t>(v * 255.0f));
   }
 }
 
-// ---- Formen (statisch bzw. dezent animiert) -------------------------------
-
-void pSpiral(CRGB* leds, const Ctx& c) {
-  for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    const float ang = atan2f(c.Y[i], c.X[i]);
-    float p = c.R[i] * 3.0f - ang / TWO_PI_F + c.t * 0.5f;
-    p -= floorf(p);
-    leds[i] = (p < 0.18f) ? CRGB(CHSV(static_cast<uint8_t>(c.R[i] * 255), 255, 255)) : CRGB::Black;
-  }
-}
-
-// Herz mit Herzschlag (zwei schnelle Schlaege, dann Pause).
-void pHeart(CRGB* leds, const Ctx& c) {
-  float beat = sinf(c.t * 6.0f);
-  beat = beat > 0.0f ? beat * beat : 0.0f;
-  const float k = 1.4f / (1.0f + 0.12f * beat);
-  for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    const float Xh = c.X[i] * k;
-    const float Yh = -c.Y[i] * k - 0.2f;
-    const float a = Xh * Xh + Yh * Yh - 1.0f;
-    const float f = a * a * a - Xh * Xh * Yh * Yh * Yh;
-    leds[i] = (f < 0.0f) ? CRGB(255, 0, 60) : CRGB::Black;
-  }
-}
-
-void pSmiley(CRGB* leds, const Ctx& c) {
-  for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    const float r = c.R[i], x = c.X[i], y = c.Y[i];
-    CRGB col = CRGB::Black;
-    if (r < 0.92f) {
-      col = CRGB(255, 210, 0);
-      const float e1 = (x - 0.32f) * (x - 0.32f) + (y - 0.30f) * (y - 0.30f);
-      const float e2 = (x + 0.32f) * (x + 0.32f) + (y - 0.30f) * (y - 0.30f);
-      if (e1 < 0.02f || e2 < 0.02f) col = CRGB::Black;
-      const float md = sqrtf(x * x + (y + 0.05f) * (y + 0.05f));
-      if (y < -0.05f && fabsf(md - 0.5f) < 0.09f) col = CRGB::Black;
-    }
-    leds[i] = col;
-  }
-}
-
-// Stern als Umriss (statt gefuellt) - viel weniger Strom, schaerferes Bild.
-void pStar(CRGB* leds, const Ctx& c) {
-  const float spin = c.t * 0.7f;
-  for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    const float ang = atan2f(c.Y[i], c.X[i]) - spin;
-    const float edge = 0.5f + 0.4f * cosf(5.0f * ang);
-    leds[i] = (fabsf(c.R[i] - edge) < 0.07f) ? CRGB(255, 200, 0) : CRGB::Black;
-  }
-}
-
-void pArrow(CRGB* leds, const Ctx& c) {
-  for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    const float x = c.X[i], y = c.Y[i];
-    bool on = false;
-    if (y > 0.25f && y < 0.75f && fabsf(x) < (0.75f - y)) on = true;   // Kopf
-    else if (y <= 0.25f && y > -0.75f && fabsf(x) < 0.13f) on = true;  // Schaft
-    leds[i] = on ? CRGB(0, 255, 80) : CRGB::Black;
-  }
-}
-
-void pTriangle(CRGB* leds, const Ctx& c) {
-  for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    const float x = c.X[i], y = c.Y[i];
-    const bool big = (y > -0.6f && y < 0.7f && fabsf(x) < (0.7f - y) * 0.7f);
-    const bool small = (y > -0.45f && y < 0.45f && fabsf(x) < (0.45f - y) * 0.7f);
-    leds[i] = (big && !small) ? CRGB(0, 220, 255) : CRGB::Black;
-  }
-}
-
-void pCross(CRGB* leds, const Ctx& c) {
-  for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    if (fabsf(c.X[i]) < LINE_T) leds[i] = CRGB(255, 0, 0);
-    else if (fabsf(c.Y[i]) < LINE_T) leds[i] = CRGB(0, 255, 0);
-    else leds[i] = CRGB::Black;
-  }
-}
-
-void pDiagonal(CRGB* leds, const Ctx& c) {
-  for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    if (fabsf(c.X[i] - c.Y[i]) < LINE_T) leds[i] = CRGB(255, 0, 0);
-    else if (fabsf(c.X[i] + c.Y[i]) < LINE_T) leds[i] = CRGB(0, 128, 255);
-    else leds[i] = CRGB::Black;
-  }
-}
-
-void pVertical(CRGB* leds, const Ctx& c) {
-  for (uint16_t i = 0; i < NUM_LEDS; i++) leds[i] = (fabsf(c.X[i]) < LINE_T) ? CRGB(0, 0, 255) : CRGB::Black;
-}
-
-void pHorizontal(CRGB* leds, const Ctx& c) {
-  for (uint16_t i = 0; i < NUM_LEDS; i++) leds[i] = (fabsf(c.Y[i]) < LINE_T) ? CRGB(0, 255, 0) : CRGB::Black;
-}
-
-void pRing(CRGB* leds, const Ctx& c) {
-  for (uint16_t i = 0; i < NUM_LEDS; i++) leds[i] = (fabsf(c.R[i] - 0.65f) < 0.08f) ? CRGB(255, 180, 0) : CRGB::Black;
-}
-
-void pRectangle(CRGB* leds, const Ctx& c) {
-  for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    const float ax = fabsf(c.X[i]), ay = fabsf(c.Y[i]);
-    const float m = ax > ay ? ax : ay;
-    leds[i] = (m > 0.55f && m < 0.80f) ? CRGB(255, 0, 200) : CRGB::Black;
-  }
-}
-
-void pConcentric(CRGB* leds, const Ctx& c) {
+// 8 Wirbel: helle Funken sitzen nur entlang einer langsam drehenden Doppelspirale
+// - ein funkelnder Strudel, der auch bei etwas Drift als Spirale lesbar bleibt.
+void pSwirl(CRGB* leds, const Ctx& c) {
+  constexpr uint8_t N = 2;
+  const float twist = 4.0f;
+  const float spin = c.t * 1.4f;
+  const float seg = TWO_PI_F / N;
+  const float W = 0.30f;                                        // Naehe zum Spiralarm
+  const uint32_t bucket = static_cast<uint32_t>(c.t * 14.0f);
+  const uint8_t baseHue = static_cast<uint8_t>(c.t * 20.0f);
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     const float r = c.R[i];
-    if (fabsf(r - 0.3f) < 0.06f) leds[i] = CRGB::Red;
-    else if (fabsf(r - 0.6f) < 0.06f) leds[i] = CRGB::Green;
-    else if (fabsf(r - 0.9f) < 0.06f) leds[i] = CRGB::Blue;
-    else leds[i] = CRGB::Black;
+    if (r > 1.0f || r < 0.05f) { leds[i] = CRGB::Black; continue; }
+    float m = (angleAt(c, i) - spin - r * twist) / seg;
+    m -= floorf(m);
+    const float d = (m < 0.5f ? m : 1.0f - m) * seg;
+    if (d > W) { leds[i] = CRGB::Black; continue; }
+    const uint32_t h = rng(i, c.column, bucket);
+    if ((h & 0x03) != 0) { leds[i] = CRGB::Black; continue; }   // 1 von 4 auf dem Arm leuchtet
+    leds[i] = CHSV(baseHue + static_cast<uint8_t>(r * 80.0f), 255, 255);
   }
-}
-
-// Kalibriermuster: vier Sektoren + weisser Marker bei Spalte 0. Hilft beim
-// Einstellen von Angle Gain und Richtung, ist als Show-Muster ungeeignet.
-void pColorBars(CRGB* leds, const Ctx& c) {
-  const uint8_t q = (static_cast<uint16_t>(c.column) * 4) / (c.columns ? c.columns : 1);
-  const CRGB col = q == 0 ? CRGB::Red : q == 1 ? CRGB::Green : q == 2 ? CRGB::Blue : CRGB::Yellow;
-  fill_solid(leds, NUM_LEDS, col);
-  if (c.column == 0) fill_solid(leds, NUM_LEDS, CRGB::White);
 }
 
 }  // namespace
 
 const char* Patterns::name(uint8_t p) {
   switch (p) {
-    case 0:  return "Komet";
-    case 1:  return "Doppelhelix";
-    case 2:  return "Pulsring";
-    case 3:  return "Speichen";
-    case 4:  return "Funken";
-    case 5:  return "Welle";
-    case 6:  return "Spirale";
-    case 7:  return "Herz";
-    case 8:  return "Smiley";
-    case 9:  return "Stern";
-    case 10: return "Pfeil";
-    case 11: return "Dreieck";
-    case 12: return "Kreuz";
-    case 13: return "Diagonale";
-    case 14: return "Vertikale Linie";
-    case 15: return "Horizontale Linie";
-    case 16: return "Kreis";
-    case 17: return "Rechteck";
-    case 18: return "Ringe";
-    case 19: return "Farbbalken (Kalib.)";
+    case 0:  return "Funken";
+    case 1:  return "Konfetti";
+    case 2:  return "Regen";
+    case 3:  return "Feuer";
+    case 4:  return "Meteore";
+    case 5:  return "Plasma";
+    case 6:  return "Sterne";
+    case 7:  return "Blitze";
+    case 8:  return "Wirbel";
     default: return "?";
   }
 }
@@ -300,8 +254,10 @@ uint16_t Patterns::nativeColumns(const Settings& settings) {
 }
 
 bool Patterns::isHeavy(uint8_t p) {
-  // Smiley fuellt eine gelbe Scheibe, Farbbalken den ganzen Streifen.
-  return p == 8 || p == 19;
+  // Nur Feuer leuchtet einen groesseren Teil des Streifens gleichzeitig und zieht
+  // damit Strom (FastLEDs Limiter dimmt dann global; die Web-UI markiert es). Alle
+  // uebrigen Muster sind spaerliche Funken/Partikel und unkritisch.
+  return p == 3;
 }
 
 void Patterns::render(CRGB* leds, const Settings& settings, float theta,
@@ -344,33 +300,23 @@ void Patterns::render(CRGB* leds, const Settings& settings, float theta,
     }
   }
 
-  const Ctx ctx{X, Y, R, tMs * 0.001f, column, columns};
+  const Ctx ctx{X, Y, R, tMs * 0.001f, column, columns, theta, settings.imageMode};
 
   switch (settings.selectedPattern) {
-    case 0:  pComet(leds, ctx); break;
-    case 1:  pHelix(leds, ctx); break;
-    case 2:  pPulse(leds, ctx); break;
-    case 3:  pSpokes(leds, ctx); break;
-    case 4:  pSparkle(leds, ctx); break;
-    case 5:  pWave(leds, ctx); break;
-    case 6:  pSpiral(leds, ctx); break;
-    case 7:  pHeart(leds, ctx); break;
-    case 8:  pSmiley(leds, ctx); break;
-    case 9:  pStar(leds, ctx); break;
-    case 10: pArrow(leds, ctx); break;
-    case 11: pTriangle(leds, ctx); break;
-    case 12: pCross(leds, ctx); break;
-    case 13: pDiagonal(leds, ctx); break;
-    case 14: pVertical(leds, ctx); break;
-    case 15: pHorizontal(leds, ctx); break;
-    case 16: pRing(leds, ctx); break;
-    case 17: pRectangle(leds, ctx); break;
-    case 18: pConcentric(leds, ctx); break;
-    default: pColorBars(leds, ctx); break;
+    case 0:  pSparkle(leds, ctx); break;
+    case 1:  pConfetti(leds, ctx); break;
+    case 2:  pRain(leds, ctx); break;
+    case 3:  pFire(leds, ctx); break;
+    case 4:  pMeteors(leds, ctx); break;
+    case 5:  pPlasma(leds, ctx); break;
+    case 6:  pStars(leds, ctx); break;
+    case 7:  pFlash(leds, ctx); break;
+    case 8:  pSwirl(leds, ctx); break;
+    default: pSparkle(leds, ctx); break;
   }
 
   // Positioniertes Bild: alles ausserhalb des Einheitskreises um das Bildzentrum
-  // schwarz -> es steht ein klar begrenztes, stilles Bild an einer Stelle im Kreis.
+  // schwarz -> es steht ein klar begrenztes Bild an einer Stelle im Kreis.
   if (settings.imageMode) {
     for (uint16_t i = 0; i < NUM_LEDS; i++) {
       if (R[i] > 1.0f) leds[i] = CRGB::Black;

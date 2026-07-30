@@ -29,13 +29,18 @@ pio device monitor   # Serielle Ausgabe (115200 Baud)
 
 ## Bedienung
 
-Drei Modi, gesteuert über den einen Taster:
+Gesteuert über den einen Taster — die Aktion entscheidet sich beim Loslassen anhand der
+Haltedauer:
 
-| Zustand | Kurzdruck | Langdruck (2 s) |
-|---|---|---|
-| **IDLE** (3 blaue LEDs) | Anzeige starten | Setup |
-| **DISPLAY** (Schleudern) | nächstes eingebautes Muster | Setup |
-| **SETUP** (Regenbogen) | zurück zu IDLE | — |
+| Zustand | Kurzdruck | 2,5 s halten | 6 s halten |
+|---|---|---|---|
+| **IDLE** (3 blaue LEDs) | Anzeige starten | Modus wechseln¹ | Setup |
+| **DISPLAY** (Schleudern) | nächstes Muster / Lichtspiel | Modus wechseln¹ | Setup |
+| **SETUP** (Regenbogen) | zurück zu IDLE | Modus wechseln¹ | — |
+
+¹ Wechselt zwischen **Dreh-Modus** (POV, Stab schleudern) und **Stab-Modus** (Lichtspiele in
+der Hand). Quittung: grüner Wisch = Stab-Modus, blauer Wisch = Dreh-Modus. Der Modus lässt
+sich auch im Setup-Reiter der Weboberfläche umschalten.
 
 Beim Booten kalibriert sich der Gyro — **Stab dabei still halten**. Ein Komet läuft
 währenddessen über den Streifen. Wird der Taster beim Einschalten gehalten, geht es
@@ -51,13 +56,17 @@ Im Setup-Modus spannt der Stab einen WLAN-Accesspoint auf:
 
 Beim Verbinden blinkt der Stab zweimal cyan. Die Oberfläche hat sechs Reiter:
 
-- **Muster** — 20 eingebaute Muster mit Rundvorschau. `⚡` markiert Muster, die viele
-  LEDs gleichzeitig leuchten lassen; das Stromlimit dimmt dann global herunter.
+- **Muster** — 9 eingebaute Partikel-Effekte mit Rundvorschau: *Funken, Konfetti, Regen,
+  Feuer, Meteore, Plasma, Sterne, Blitze, Wirbel*. Bewusst **viele helle Einzelpunkte auf
+  tiefem Schwarz** in voller Helligkeit statt stehender Vollbilder — das steht am
+  handgeschleuderten Stab drift-fest und kontrastreich in der Luft, während flächige oder
+  fein-geometrische Bilder verwaschen und vom Stromlimit gedimmt werden. (`⚡` markiert
+  *Feuer*, das flächiger leuchtet und das Stromlimit global herunterdimmen kann.)
 - **Malen** — vier Zeichen-Slots, 48 × 65 Pixel, 16-Farben-Palette.
 - **Text** — bis 32 Zeichen, 5×7-Font (Großbuchstaben, Ziffern, `. ! ? - :`).
 - **Foto** — vier Foto-Slots. Das Bild wird im Browser rund zugeschnitten und in ein
   Polarraster umgerechnet, erst dann hochgeladen.
-- **Setup** — Helligkeit, Auflösung, Bildposition, Sensorparameter, Nachkalibrierung.
+- **Setup** — Stab-Modus, Helligkeit, Auflösung, Bildposition, Sensorparameter, Nachkalibrierung.
 - **DEV** — Live-Telemetrie und Diagnose der letzten Schleuder-Sitzung.
 
 **Beim Start der Anzeige wird das WLAN abgeschaltet**, damit die volle Rechenzeit in
@@ -77,6 +86,30 @@ Bild nur einen schmalen Winkelbereich belegt, rendert der Stab dort adaptiv mit 
 Der Modus gilt nur für eingebaute Muster; Text, Zeichnungen und Fotos laufen immer
 über den Vollkreis.
 
+## Stab-Modus (nicht drehen)
+
+Neben POV gibt es den **Stab-Modus**: der Stab wird *nicht* geschleudert, sondern in
+der Hand gehalten und geführt. Statt eines Luftbildes laufen dann bewegungsreaktive
+Lichtspiele direkt über den Streifen — ideal zum ruhigen Spielen oder als Glowstick.
+Einschalten im Reiter **Setup → Stab-Modus**, das Lichtspiel dort per Auswahl oder im
+laufenden Betrieb per Taster wechseln.
+
+Die acht Lichtspiele sind bewusst *kinetisch* — wenige helle Punkte in Bewegung statt
+flächiger Füllungen — und reagieren auf Wedeln, Neigen und Schütteln:
+
+| Lichtspiel | Idee | reagiert auf |
+|---|---|---|
+| **Kollision** | zwei Punkte laufen aufeinander zu, treffen sich mit Blitz | Wedeln → Tempo |
+| **Pong** | ein Ball bounct zwischen den Enden | Neigen → rollt bergab; Schütteln → Kick |
+| **Jagd** | blauer Punkt jagt orangen im Kreis, blitzt beim Einholen | Schwung → Richtung/Tempo |
+| **Komet** | heller Kopf mit Schweif saust auf und ab | Wedeln → Geschwindigkeit |
+| **Funken** | einzelne Funken springen | Schütteln → zündet Schwälle |
+| **Regen** | Tropfen fallen der Schwerkraft nach, blitzen beim Aufschlag | Neigen → Fallrichtung/-tempo |
+| **Magnet** | mehrere Punkte werden zu einem Punkt gezogen, dann stieben sie auseinander | Neigen → Sammelpunkt |
+| **Pegel** | VU-Balken (grün→rot) mit Spitzenpunkt | Bewegung → Länge |
+
+Zum Aufhängen als POV-Bild den Stab-Modus einfach wieder ausschalten.
+
 ## Wichtige Einstellungen
 
 | Regler | Bedeutung |
@@ -85,6 +118,7 @@ Der Modus gilt nur für eingebaute Muster; Text, Zeichnungen und Fotos laufen im
 | **Angle Gain** | Trimmt die Winkelmessung. Erscheint das Bild mehrfach → zu hoch. Wandert es → zu niedrig. |
 | **Gyro-Achse** | Muss zur Einbaulage des Sensors passen. |
 | **Stromlimit** | Schützt Akku und Spannungslage. Zu niedrig → FastLED dimmt global. |
+| **Bildgröße** (15–100 %) | Durchmesser des positionierten Bildes. **Kleiner ist nicht schärfer:** der Bildraum wird gestaucht, unter ~15 % ist das Bild schmaler als ~19 LED-Abstände und Formen lassen sich nicht mehr auflösen. Wirkt das Bild grob → vergrößern. |
 | **Phase-Lock** | Schwerkraft-basierte Driftkorrektur. Funktioniert nur unter ~2,4 U/s; beim schnellen Schleudern sättigt der Beschleunigungssensor. Im Zweifel aus lassen. |
 
 ## Kalibrieren
@@ -94,7 +128,36 @@ Booten gemessen — wurde der Stab dabei bewegt, driftet das Bild die ganze Sitz
 Über **Setup → Sensor neu kalibrieren** lässt er sich jederzeit neu bestimmen; die
 Messung läuft im Sensor-Task und startet erst, wenn der Stab wirklich ruht.
 
-Bleibt ein Rest, hilft *Angle Gain* in kleinen Schritten (0,005).
+### Angle Gain
+
+Der Nullpunkt ist nur die halbe Miete — der zweite Fehler ist die *Skala*. Die
+MPU6050-Empfindlichkeit streut fertigungsbedingt um ±3 %, was bis zu ~11° Wanderung
+pro Umdrehung verursacht. Dafür ist *Angle Gain* da.
+
+**Manuell:** Wandert das Bild entgegen der Drehrichtung um den Bruchteil *f* einer
+Umdrehung, *Angle Gain* mit `(1 − f)` multiplizieren; wandert es mit, mit `(1 + f)`.
+Ein Zehntel Kreis rückwärts pro Umdrehung → Gain × 0,9.
+
+**Automatisch:** **DEV → Gain selbst einregeln**. Der Phase-Lock liefert über die
+Schwerkraft einmal pro Umdrehung einen absoluten Winkelbezug. Der dabei verbleibende
+Fehler `err` hängt direkt am Skalenfehler `G`:
+
+```
+pro Umdrehung läuft der Winkel um (G−1)·2π davon,
+der PLL zieht mit Faktor P zurück
+  ⇒ eingeschwungen gilt  err = −(G−1)·2π / P
+  ⇒ der Fixpunkt err = 0 ist exakt G = 1
+```
+
+Weil der Fixpunkt nicht davon abhängt, wie genau `P` bekannt ist, genügt ein langsamer
+Integrator mit richtigem Vorzeichen. Die Regelung braucht **eingeschalteten Phase-Lock**
+und **0,6–3 U/s** (ruhiges Drehen von Hand, kein Schleudern) und konvergiert in rund
+40 Umdrehungen. Außerhalb des Drehzahlfensters friert sie ein und behält den gelernten
+Wert; gespeichert wird beim Verlassen des Display-Modus. Der DEV-Tab zeigt an, warum
+sie gerade nicht greift.
+
+Einmal eingeregelt kann der Schalter aus bleiben — der Gain ist sensorindividuell und
+ändert sich nicht mehr.
 
 ## Architektur
 
@@ -109,8 +172,9 @@ MPU6050 ──► MotionSensor ──► PovRenderer ──► Patterns ──�
 | `main.cpp` | Modus-Zustandsautomat, Tastenlogik |
 | `config.h` | Pins, Sensorregister, Timing — dokumentiert die Messungen hinter den Werten |
 | `MotionSensor` | Gyro-Integration zum Drehwinkel, Phase-Lock, Telemetrie |
-| `PovRenderer` | Winkelquantisierung, adaptive Spaltenzahl, Bildfenster |
-| `Patterns` | 20 eingebaute Muster im kartesischen Bildraum |
+| `PovRenderer` | Winkelquantisierung, adaptive Spaltenzahl, Bildfenster, Stab-Modus |
+| `Patterns` | 9 eingebaute Partikel-Effekte im kartesischen Bildraum |
+| `WandPatterns` | 8 kinetische Lichtspiele für den Stab-Modus (linear, kein POV) |
 | `PatternStore` | Zeichen-Slots und Text-Font (NVS) |
 | `PhotoStore` | Foto-Slots als RGB565-Polarbilder (LittleFS) |
 | `WebInterface` / `WebUI.h` | HTTP-API und eingebettete Single-Page-App |
@@ -139,16 +203,22 @@ Dann in `Patterns::name()` und dem `switch` in `Patterns::render()` eintragen un
 lesen, liefe die Animation innerhalb einer Umdrehung weiter und das Bild erschiene
 in sich verdreht statt als bewegtes Ganzes.
 
-Für POV gilt: dünne helle Formen auf Schwarz lesen sich gut, Flächenmuster nicht.
-Wer viele LEDs gleichzeitig leuchten lässt, sollte das Muster in `Patterns::isHeavy()`
-markieren.
+Für POV am handgeschleuderten Stab gilt: **viele helle Einzelpunkte auf Schwarz** lesen
+sich am besten. Stehende Vollbilder und feine Geometrie verwaschen, weil der Winkel leicht
+driftet und das Stromlimit Flächen dimmt. Die eingebauten Muster arbeiten deshalb
+partikelbasiert — jeder Bildpunkt wird über einen Hash aus `i`, `c.column` und einem
+Zeit-Bucket an-/ausgeknipst (`rng()`), was jede Spalte unabhängig und damit drift-fest
+macht. Wer viele LEDs gleichzeitig leuchten lässt, sollte das Muster in `Patterns::isHeavy()`
+markieren (nur ein UI-Hinweis; die Helligkeit begrenzt ohnehin immer das Stromlimit).
 
 ## Fehlersuche
 
 | Symptom | Ursache |
 |---|---|
-| Bild wandert langsam | Gyro-Drift → neu kalibrieren, dann *Angle Gain* trimmen |
-| Bild erscheint doppelt | *Angle Gain* zu hoch |
+| Bild wandert langsam | Skalenfehler → *Angle Gain* trimmen oder Auto-Kalibrierung (DEV) |
+| Bild wandert entgegen der Drehrichtung | *Angle Gain* zu hoch |
+| Bild erscheint doppelt | *Angle Gain* deutlich zu hoch |
+| Form nur halb sichtbar (z. B. halbes Kreuz) | Bildgröße zu klein → vergrößern; im DEV-Tab *Auslastung* prüfen |
 | Text/Bild spiegelverkehrt | *Richtung invertieren* |
 | Bild flackert oder ist flau | Stromlimit greift → Helligkeit runter oder Muster ohne `⚡` |
 | Rot und Blau vertauscht | Kanalordnung in `LedController::begin()` von `BGR` auf `RGB`/`GRB` |

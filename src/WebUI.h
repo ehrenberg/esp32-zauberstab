@@ -139,6 +139,11 @@ nav .ic{font-size:21px;line-height:1}
 </section>
 
 <section id="v-setup" class="view">
+<div class="card"><h2>Stab-Modus</h2>
+<label class="row"><span>Stab-Modus (nicht drehen) <i class="info" onclick="App.info('wmode')">i</i></span><span class="sw"><input type="checkbox" id="wmode" onchange="App.saveSet('wmode',this.checked?1:0)"><i></i></span></label>
+<label class="row"><span>Lichtspiel</span><select id="wpat" onchange="App.saveSet('wpat',this.value)"></select></label>
+<p class="hint">Ohne Drehen: der Stab macht in der Hand bewegungsreaktive Lichtspiele. Wedeln, Neigen und Schuetteln steuern Tempo, Farbe und Fuellung. Im laufenden Betrieb blaettert der Taster durch die Lichtspiele. Zum Aufhaengen als POV-Bild diesen Schalter wieder aus.</p>
+</div>
 <div class="card"><h2>Anzeige</h2><div id="setA"></div></div>
 <div class="card"><h2>Bild im Kreis</h2>
 <label class="row"><span>Bild oben (statt Vollkreis) <i class="info" onclick="App.info('imode')">i</i></span><span class="sw"><input type="checkbox" id="imode" onchange="App.saveSet('imode',this.checked?1:0)"><i></i></span></label>
@@ -159,6 +164,10 @@ nav .ic{font-size:21px;line-height:1}
 </section>
 
 <section id="v-dev" class="view">
+<div class="card"><h2>Automatische Gain-Kalibrierung</h2>
+<label class="row"><span>Gain selbst einregeln <i class="info" onclick="App.info('again')">i</i></span><span class="sw"><input type="checkbox" id="again" onchange="App.setAutoGain(this.checked)"><i></i></span></label>
+<div id="devGain" class="kv"></div>
+<p class="hint" style="margin-top:12px">Braucht eingeschalteten Phase-Lock und eine Drehzahl zwischen etwa 0,6 und 3 U/s – also ruhiges Drehen von Hand, nicht Schleudern. Den Stab so lange gleichmässig drehen, bis der Gain stehen bleibt; der Wert wird beim Verlassen des Display-Modus gespeichert.</p></div>
 <div class="card"><h2>Drehung (live)</h2><div id="devRot" class="kv"></div></div>
 <div class="card"><h2>Sensor (live)</h2><div id="devSensor" class="kv"></div></div>
 <div class="card"><h2>Letzte Schleuder-Sitzung</h2><div id="devSession" class="kv"></div>
@@ -212,9 +221,9 @@ const App={
   mk(document.getElementById('drawPal'),this.curColor,(i,h)=>{this.curColor=i;[...h.children].forEach((c,k)=>c.classList.toggle('sel',k==i));});
   mk(document.getElementById('textPal'),this.st.textColor,(i,h)=>{this.curTextColor=i;[...h.children].forEach((c,k)=>c.classList.toggle('sel',k==i));this.textApply();});
   this.curTextColor=this.st.textColor;},
- SET_A:[['bright','Helligkeit',1,100,1],['columns','POV-Spalten',8,192,1],['blur','Nachleuchten',0,250,1],['persist','Winkelbreite',1,9,1],['current','Stromlimit mA',300,3000,100],['holdus','Halten µs',2000,30000,100]],
- SET_B:[['gain','Angle Gain (Drift-Trim)',0.2,3,0.005],['threshold','Gyro-Schwelle',0.05,8,0.05]],
- SET_IMG:[['iang','Bildwinkel',0,359,1],['irad','Bildhoehe',0,100,1],['iscale','Bildgroesse',5,100,1]],
+ SET_A:[['bright','Helligkeit',1,100,1],['columns','POV-Spalten',8,255,1],['blur','Nachleuchten',0,50,1],['persist','Winkelbreite',1,9,1],['current','Stromlimit mA',300,2000,100],['holdus','Halten µs',200,15000,100]],
+ SET_B:[['gain','Angle Gain (Drift-Trim)',0.5,1.5,0.005],['threshold','Gyro-Schwelle',0.05,8,0.05]],
+ SET_IMG:[['iang','Bildwinkel',0,359,1],['irad','Bildhoehe',0,100,1],['iscale','Bildgroesse',15,100,1]],
  buildSettings(){const mk=(host,arr)=>{host.innerHTML='';arr.forEach(([k,lab,mn,mx,st])=>{
    const wrap=document.createElement('div');const float=st<1;
    wrap.innerHTML=`<label class="row"><span>${lab} <i class="info" onclick="App.info('${k}')">i</i></span><span class="v" id="v_${k}"></span></label>`+
@@ -224,20 +233,34 @@ const App={
    inp.oninput=()=>document.getElementById('v_'+k).textContent=float?(+inp.value).toFixed(3):inp.value;
    inp.onchange=()=>this.saveSet(k,inp.value);});};
   mk(document.getElementById('setA'),this.SET_A);mk(document.getElementById('setB'),this.SET_B);
-  mk(document.getElementById('setImg'),this.SET_IMG);},
+  mk(document.getElementById('setImg'),this.SET_IMG);
+  const wp=document.getElementById('wpat');
+  if(wp){wp.innerHTML='';(this.st.wandNames||[]).forEach((n,i)=>{
+   const o=document.createElement('option');o.value=i;o.textContent=n;wp.appendChild(o);});}},
  fill(){const s=this.st.settings;
   [...this.SET_A,...this.SET_B,...this.SET_IMG].forEach(([k,l,mn,mx,st])=>{const e=document.getElementById('s_'+k);if(!e)return;
    e.value=s[k];document.getElementById('v_'+k).textContent=st<1?(+s[k]).toFixed(3):s[k];});
   document.getElementById('axis').value=s.axis;
   document.getElementById('invert').checked=!!s.invert;
   document.getElementById('plock').checked=!!s.plock;
+  document.getElementById('again').checked=!!s.again;
   document.getElementById('imode').checked=!!s.imode;
+  document.getElementById('wmode').checked=!!s.wmode;
+  const wp=document.getElementById('wpat');if(wp&&s.wpat!==undefined)wp.value=s.wpat;
   document.getElementById('txt').value=this.st.text;},
  async pick(mode,index){this.st.patternMode=mode;if(mode==0)this.st.pattern=index;
-  await this.j('/api/select?mode='+mode+'&index='+index,{method:'POST'});this.markTiles();this.refresh();},
+  this.markTiles();  // sofort hervorheben - nicht auf Server-Roundtrip + Vorschau warten
+  await this.j('/api/select?mode='+mode+'&index='+index,{method:'POST'});this.refresh();},
  async saveSet(k,v){const b=new URLSearchParams();b.set(k,v);
   // fill() zieht die Regler nach: clampSettings() kann den Wert korrigiert haben.
   this.st=await this.j('/api/settings',{method:'POST',body:b});this.fill();this.refresh();},
+ // Ohne Phase-Lock hat die Regelung keinen absoluten Winkelbezug und tut nichts.
+ async setAutoGain(on){
+  if(on&&!this.st.settings.plock){
+   if(!confirm('Die Regelung braucht den Phase-Lock als Winkelbezug.\n\nPhase-Lock mit einschalten?')){
+    document.getElementById('again').checked=false;return;}
+   await this.saveSet('plock',1);}
+  await this.saveSet('again',on?1:0);},
  async calibrate(){if(!confirm('Sensor neu kalibrieren?\n\nStab dabei ruhig und still halten.'))return;
   await fetch('/api/calibrate',{method:'POST'});this.flash('Kalibriere…');},
  // ---- Vorschau ----
@@ -248,10 +271,17 @@ const App={
   if(this._anim){clearInterval(this._anim);this._anim=null;b.classList.remove('on');b.textContent='▶ Animation';return;}
   b.classList.add('on');b.textContent='■ Animation';
   this._anim=setInterval(()=>{if(!document.hidden)this.refresh();},900);},
- async refresh(){const f=await this.j('/api/frame');this._frame=f;this.draw(f);
-  const deg=(f.span*180/Math.PI).toFixed(0);
-  document.getElementById('previewInfo').textContent=
-   f.span<6.2?f.cols+' Schritte über '+deg+'° · Bildfenster':f.cols+' Spalten · Vollkreis';},
+ // Der ESP rendert jeden Frame synchron im Webserver-Handler (~21 KB ueber den AP).
+ // Ohne Sperre wuerden Animations-Timer, poll(), pick() und saveSet() ueberlappende
+ // /api/frame-Abfragen stapeln -> der einkernige Webserver kommt nicht hinterher und
+ // die Vorschau bleibt leer oder haengt. Ein laufender Frame blockt weitere Abrufe.
+ async refresh(){if(this._busy)return;this._busy=true;
+  try{const f=await this.j('/api/frame');this._frame=f;this.draw(f);
+   const deg=(f.span*180/Math.PI).toFixed(0);
+   document.getElementById('previewInfo').textContent=
+    f.span<6.2?f.cols+' Schritte über '+deg+'° · Bildfenster':f.cols+' Spalten · Vollkreis';}
+  catch(e){}
+  finally{this._busy=false;}},
  // Jede Spalte ist ein Kreissegment, kein Punkt: bei 46 Spalten liegen am
  // Aussenrand ~17 px zwischen zwei Spalten - gezeichnete Punkte hinterlassen
  // dort Luecken und das Muster zerfaellt zu Konfetti. Gleichfarbige LEDs
@@ -364,11 +394,13 @@ const App={
   threshold:['Gyro-Schwelle','Ab welcher Drehgeschwindigkeit (rad/s) die Anzeige startet.'],
   iang:['Bildwinkel','Position des stehenden Bildes auf dem Kreis (0-359 Grad). Damit schiebst du es nach oben.'],
   irad:['Bildhoehe','Abstand des Bildzentrums von der Scheibenmitte (0-100%).'],
-  iscale:['Bildgroesse','Durchmesser des positionierten Bildes (5-100%).'],
+  iscale:['Bildgroesse','Durchmesser des positionierten Bildes (15-100%). Kleiner heisst nicht schaerfer: das Bild wird auf immer weniger LED-Abstaende gestaucht, ab etwa 15% lassen sich Formen nicht mehr aufloesen. Wirkt das Bild grob, hier VERGROESSERN.'],
   axis:['Gyro-Achse','Drehachse des Sensors (X/Y/Z). Muss zur Einbaulage passen, sonst wird die Drehung falsch erkannt.'],
   invert:['Richtung invertieren','Dreht die Laufrichtung um - falls Text/Bild spiegelverkehrt erscheint.'],
   plock:['Phase-Lock','Schwerkraft-Drift-Korrektur. Funktioniert nur bei langsamer Drehung (unter ~2,4 U/s); bei schnellem Schleudern saettigt der Sensor - dann aus lassen.'],
-  imode:['Bild oben','Zeigt das Muster als kleines, stehendes Bild an einer Stelle statt ueber den ganzen Kreis verteilt.']
+  imode:['Bild oben','Zeigt das Muster als kleines, stehendes Bild an einer Stelle statt ueber den ganzen Kreis verteilt.'],
+  wmode:['Stab-Modus','Der Stab wird nicht geschleudert, sondern in der Hand gehalten. Statt eines POV-Bildes laufen dann bewegungsreaktive Lichtspiele direkt ueber den Streifen - sie reagieren auf Wedeln (Tempo/Helligkeit), Neigen (Fuellstand) und kurzes Schuetteln (Funken/Feuer). Das Lichtspiel waehlst du unten oder im Betrieb per Taster.'],
+  again:['Gain selbst einregeln','Der Phase-Lock misst einmal pro Umdrehung den absoluten Winkel ueber die Schwerkraft. Aus dem dabei verbleibenden Fehler laesst sich der Skalenfehler der Winkelmessung direkt ableiten - die Regelung zieht Angle Gain langsam nach, bis der Fehler verschwindet. Dauert etwa 40 gleichmaessige Umdrehungen. Ausserhalb von 0,6-3 U/s friert sie ein und behaelt den gelernten Wert.']
  },
  info(k){const d=this.INFO[k];if(!d)return;document.getElementById('modalTitle').textContent=d[0];
   document.getElementById('modalText').textContent=d[1];document.getElementById('modal').classList.add('open');},
@@ -377,9 +409,34 @@ const App={
  kv(host,rows){const h=document.getElementById(host);if(!h)return;
   h.innerHTML=rows.map(r=>`<div class="k">${r[0]}</div><div class="val ${r[2]||''}">${r[1]}</div>`).join('');},
  upt(sec){const m=Math.floor(sec/60),h=Math.floor(m/60);return h>0?h+'h '+(m%60)+'m':m+'m '+(sec%60)+'s';},
+ // Warum die Regelung gerade nicht greift, ist wichtiger als ob sie an ist.
+ autoGainState(s){
+  if(!s.again)return['Aus',''];
+  if(!s.plock)return['Phase-Lock fehlt','bad'];
+  if(s.mode!='DISPLAY')return['Wartet auf Display-Modus',''];
+  if(!s.rotating)return['Wartet auf Drehung',''];
+  const u=s.rpm/60;
+  if(u<0.6)return['Zu langsam ('+u.toFixed(1)+' U/s)','bad'];
+  if(u>3.2)return['Zu schnell ('+u.toFixed(1)+' U/s)','bad'];
+  if(!s.locked)return['Sucht Phasenbezug',''];
+  return['Regelt','good'];},
  renderDev(s){if(s.rpm===undefined)return;
-  this.kv('devRot',[['Dreht',s.rotating?'Ja':'Nein',s.rotating?'good':''],['Lock',s.locked?'Ja':'Nein',s.locked?'good':''],['RPM',Math.round(s.rpm)],['Spalten effektiv',s.effCols],['Ausgabe',s.outHz+' Hz']]);
-  this.kv('devSensor',[['Sample-Rate',Math.round(s.sampleHz)+' Hz',s.sampleHz<300?'bad':'good'],['I2C-Fehler',s.fails,s.fails>500?'bad':'good']]);
+  const ag=this.autoGainState(s);
+  this.kv('devGain',[['Zustand',ag[0],ag[1]],['Angle Gain',(+s.gain).toFixed(3)],
+   ['Fehler Ø',s.errAvg+'°'],['Lock-Ereignisse',s.locks]]);
+  // frameUs = gemessene Dauer Muster-rechnen + show. Mal effCols mal U/s muss
+  // unter 1 s bleiben, sonst kommt der ESP nicht hinterher und das Bild schmiert.
+  const load=s.frameUs*s.effCols*(s.rpm/60)/1e6;
+  this.kv('devRot',[['Dreht',s.rotating?'Ja':'Nein',s.rotating?'good':''],['Lock',s.locked?'Ja':'Nein',s.locked?'good':''],['RPM',Math.round(s.rpm)],['Spalten effektiv',s.effCols],['Ausgabe',s.outHz+' Hz'],
+   ['Frame-Dauer',s.frameUs+' µs'],['Auslastung',(load*100).toFixed(0)+' %',load>0.95?'bad':'good']]);
+  // Soll-Fenster ist symmetrisch +/-covWin. Deckt das Gezeichnete nur eine Seite
+  // ab, fehlt die andere Bildhaelfte wirklich in der Winkelkette.
+  const cw=s.covWin||0,asym=cw>0&&(Math.abs(s.covMin)<cw*0.6||Math.abs(s.covMax)<cw*0.6);
+  this.kv('devSensor',[['Sample-Rate',Math.round(s.sampleHz)+' Hz',s.sampleHz<300?'bad':'good'],
+   ['I2C-Fehler',s.fails,s.fails>500?'bad':'good'],
+   ['Dreh-Aussetzer',s.drops,s.drops>0?'bad':'good'],
+   ['Fenster soll','±'+cw+'°'],
+   ['Fenster gezeichnet',s.covMin+'° … '+s.covMax+'°',asym?'bad':'good']]);
   this.kv('devSession',[['Lock-Ereignisse',s.locks],['Verworfen',s.rej],['Fehler Ø',s.errAvg+'°'],['Fehler max',s.errMax+'°'],['Drehzahl max',Math.round(s.rpmMax)+' RPM'],['Sample min',Math.round(s.hzMin)+' Hz']]);
   this.kv('devSys',[['Freier Speicher',(s.heap/1024).toFixed(0)+' KB'],['Laufzeit',this.upt(s.uptime)]]);},
 };

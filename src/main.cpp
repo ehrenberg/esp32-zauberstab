@@ -8,6 +8,7 @@
 #include "WebInterface.h"
 #include "ButtonHandler.h"
 #include "Patterns.h"
+#include "WandPatterns.h"
 #include "PatternStore.h"
 #include "PhotoStore.h"
 
@@ -28,7 +29,8 @@ void startDisplay();
 void stopToIdle();
 void flushSettings();
 void handleShortPress();
-void handleLongPress();
+void handleModeSwitch();
+void handleSetup();
 
 void setup() {
   Serial.begin(SERIAL_BAUD);
@@ -72,7 +74,7 @@ void setup() {
 }
 
 void loop() {
-  button.update(handleShortPress, handleLongPress);
+  button.update(handleShortPress, handleModeSwitch, handleSetup);
   web.handle();
 
   if (mode == MODE_ERROR) {
@@ -105,6 +107,14 @@ void handleShortPress() {
   }
 
   if (mode == MODE_DISPLAY) {
+    // Im Stab-Modus blaettert der Kurzdruck durch die Stab-Lichtspiele.
+    if (settings.wandMode) {
+      settings.wandPattern++;
+      if (settings.wandPattern >= WandPatterns::COUNT) settings.wandPattern = 0;
+      settingsDirty = true;
+      return;
+    }
+
     // Kurzdruck blaettert durch die eingebauten Muster. Der erste Druck aus
     // einem anderen Modus (Text/Zeichnung/Foto) wechselt nur zu den eingebauten
     // Mustern, ohne die Auswahl zu ueberspringen - vorher ging dabei still die
@@ -129,8 +139,30 @@ void handleShortPress() {
   }
 }
 
-void handleLongPress() {
+void handleSetup() {
   enterSetupMode();
+}
+
+// 2,5s-Halten: zwischen Stab-Modus (Lichtspiele in der Hand) und Dreh-Modus
+// (POV) umschalten. Funktioniert in jedem Betriebszustand.
+void handleModeSwitch() {
+  settings.wandMode = !settings.wandMode;
+  ledController.showModeSwitch(settings.wandMode);
+  Serial.print("Modus umgeschaltet -> ");
+  Serial.println(settings.wandMode ? "Stab-Modus" : "Dreh-Modus (POV)");
+
+  if (mode == MODE_DISPLAY) {
+    // Kein NVS-Write in der laufenden Anzeige (blockiert die Schleife) - erst
+    // beim Verlassen. Der Renderer nimmt den neuen Modus sofort auf.
+    settingsDirty = true;
+    renderer.reset();
+    ledController.clear(true);
+  } else {
+    // In IDLE/SETUP ist ein Flash-Write unkritisch -> gleich sichern.
+    saveSettings(settings);
+    if (mode == MODE_IDLE) ledController.showIdle();
+    else if (mode == MODE_SETUP) ledController.showSetup();
+  }
 }
 
 void startDisplay() {
@@ -143,6 +175,12 @@ void startDisplay() {
 }
 
 void flushSettings() {
+  // Die automatische Gain-Kalibrierung schreibt angleGain im Sensor-Task; der
+  // eingeregelte Wert waere sonst beim Ausschalten weg.
+  if (motionSensor.gainChanged()) {
+    motionSensor.clearGainChanged();
+    settingsDirty = true;
+  }
   if (!settingsDirty) return;
   settingsDirty = false;
   saveSettings(settings);

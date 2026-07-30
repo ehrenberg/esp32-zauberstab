@@ -12,6 +12,9 @@ public:
   void showIdle();
   void showSetup();
   void showPatternChange(uint8_t pattern);
+  // Rueckmeldung fuer den 2,5s-Umschalter: gruener Wisch = Stab-Modus,
+  // blauer Wisch = Dreh-Modus (POV).
+  void showModeSwitch(bool wandMode);
   void showCalibrationProgress(int sample, int samples);
   void showCalibrationDone();
   void renderSetupBlink();

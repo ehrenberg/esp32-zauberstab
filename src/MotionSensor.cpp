@@ -70,26 +70,51 @@ void MotionSensor::requestCalibration() {
 }
 
 bool MotionSensor::isCalibrating() const { return calibRequested; }
+bool MotionSensor::gainChanged() const { return gainAdjusted; }
+void MotionSensor::clearGainChanged() { gainAdjusted = false; }
 
 void MotionSensor::step() {
   const uint32_t now = micros();
-  uint32_t dtUs = now - lastStepUs;
-  lastStepUs = now;
 
   int16_t gRaw;
   const uint8_t reg = GYRO_AXIS_REG[cfg->gyroAxis > 2 ? 1 : cfg->gyroAxis];
   if (!readWord(reg, gRaw)) {
+    // lastStepUs bewusst NICHT nachziehen: sonst faellt die Zeit dieses
+    // Versuchs unter den Tisch und die Drehung waehrend des Fehlers wird nie
+    // integriert. Bei tausenden I2C-Fehlern (siehe LED_DATA_RATE_MHZ) summiert
+    // sich das zu einem systematisch zu kleinen Winkel - das Bild wandert.
+    // Der naechste erfolgreiche Schritt holt das Intervall nach.
     readFailures++;
     return;
   }
 
+  uint32_t dtUs = now - lastStepUs;
+  lastStepUs = now;
+
   const float gyroRad = (gRaw / GYRO_SCALE_2000) * (PI / 180.0f) - gyroOffset;
   lastGyroRad = gyroRad;
+  // Vorzeichenbehaftete Rate im Winkelraum (inkl. Richtung und Gain) - der
+  // Renderer braucht sie fuer die Lead-Kompensation; speed ist ein Betrag.
+  signedRateRad = gyroRad * (cfg->invertDirection ? -1.0f : 1.0f) * cfg->angleGain;
   const float aspeed = fabsf(gyroRad);
   speed += (aspeed - speed) * SENSOR_SPEED_ALPHA;
 
   const float rpmNow = speed * 9.549296586f;
   if (rpmNow > dbgRpmMax) dbgRpmMax = rpmNow;
+
+  // ---- Stab-Modus-Telemetrie ----------------------------------------------
+  // Wird der Stab gehalten statt gedreht, liefert das Gyro allein zu wenig. Hier
+  // zusaetzlich eine Accel-Achse lesen: der langsame Mittelwert ist die Neigung
+  // (Schwerkraft-Anteil), die Abweichung davon der "Shake". Nur im Stab-Modus,
+  // um den I2C-Bus im POV-Betrieb nicht zusaetzlich zu belasten.
+  if (cfg->wandMode) {
+    int16_t aRaw;
+    if (readWord(ACCEL_AXIS_REG[cfg->gyroAxis], aRaw)) {
+      const float g = aRaw / ACCEL_SCALE_16G;                 // in g
+      wandShakeG += (fabsf(g - wandTiltG) - wandShakeG) * 0.12f;
+      wandTiltG += (g - wandTiltG) * 0.05f;                   // langsame Neigung
+    }
+  }
 
   // Samplerate-Statistik
   samplesSinceRate++;
@@ -111,7 +136,11 @@ void MotionSensor::step() {
     aboveSinceUs = 0;
     if (rotating) {
       if (belowSinceUs == 0) belowSinceUs = now;
-      else if (now - belowSinceUs > ROT_OFF_DELAY_US) rotating = false;
+      else if (now - belowSinceUs > ROT_OFF_DELAY_US) {
+        rotating = false;
+        stoppedSinceUs = now;
+        dbgDropouts++;  // haeufige Aussetzer = Schwelle zu hoch fuer diese Drehweise
+      }
     }
   }
 
@@ -123,7 +152,12 @@ void MotionSensor::step() {
   }
 
   if (!rotating) {
-    angleRad = 0.0f;
+    // Den Winkel NICHT bei jedem Aussetzer wegwerfen. Beim Drehen von Hand faellt
+    // die Momentangeschwindigkeit regelmaessig kurz unter die Schwelle (Handgelenk
+    // am Anschlag, Umgreifen). Ein Reset auf 0 zerstoert dann die Phase: der Winkel
+    // muss erst wieder bis zum Bildfenster hochlaufen, und der Bildteil direkt nach
+    // dem Aussetzer fehlt. Erst nach einem echten Stillstand neu beginnen.
+    if (now - stoppedSinceUs > ROT_RESET_AFTER_US) angleRad = 0.0f;
 
     // Angeforderte Nachkalibrierung: nur im Stillstand mitteln. Der Wert ist
     // bereits offsetbereinigt, der Mittelwert also der verbliebene Restbias.
@@ -201,6 +235,18 @@ void MotionSensor::phaseLockStep(uint32_t now) {
       dbgErrAbsSum += ae;
       if (ae > dbgErrAbsMax) dbgErrAbsMax = ae;
 
+      // Automatische Gain-Kalibrierung: err ist der pro Umdrehung verbliebene
+      // Winkelfehler. Ist der Gain zu hoch, laeuft der Winkel vor (err < 0) und
+      // der Gain wird verkleinert - der Fixpunkt err = 0 ist genau der richtige
+      // Skalenfaktor. Bewusst sehr langsam: ~36 Umdrehungen fuer 3 % Korrektur.
+      if (cfg->autoGain && fabsf(err) < AUTOGAIN_MAX_ERR_RAD) {
+        float g = cfg->angleGain + cfg->angleGain * err * AUTOGAIN_RATE;
+        if (g < 0.2f) g = 0.2f;
+        else if (g > 3.0f) g = 3.0f;
+        cfg->angleGain = g;
+        gainAdjusted = true;
+      }
+
       float a = angleRad + PHASE_LOCK_PLL_GAIN * err;
       if (a < 0.0f) a += TWO_PI_F;
       else if (a >= TWO_PI_F) a -= TWO_PI_F;
@@ -222,6 +268,23 @@ float MotionSensor::rpm() const { return speed * 9.549296586f; }
 bool MotionSensor::isRotating() const { return rotating; }
 bool MotionSensor::isLocked() const { return locked; }
 float MotionSensor::gyroRad() const { return lastGyroRad; }
+float MotionSensor::signedRate() const { return signedRateRad; }
+
+float MotionSensor::wandEnergy() const {
+  // Schwung (|Gyro|, bereits tiefpassgefiltert) plus harte Spitzen. ~6 rad/s
+  // Handgelenk-Schwung erreicht Vollausschlag.
+  float e = speed * 0.16f + wandShakeG * 1.2f;
+  return e > 1.0f ? 1.0f : e;
+}
+float MotionSensor::wandTilt() const {
+  float v = wandTiltG;
+  return v < -1.0f ? -1.0f : (v > 1.0f ? 1.0f : v);
+}
+float MotionSensor::wandShake() const {
+  float v = wandShakeG;
+  return v > 1.0f ? 1.0f : v;
+}
+
 float MotionSensor::offset() const { return gyroOffset; }
 float MotionSensor::sampleRateHz() const { return sampleRate; }
 uint32_t MotionSensor::failedReads() const { return readFailures; }
@@ -231,6 +294,7 @@ float MotionSensor::errAvgDeg() const { return dbgLockEvents > 0 ? dbgErrAbsSum 
 float MotionSensor::errMaxDeg() const { return dbgErrAbsMax; }
 float MotionSensor::rpmMaxSession() const { return dbgRpmMax; }
 float MotionSensor::hzMinSession() const { return dbgHzMin; }
+uint32_t MotionSensor::dropouts() const { return dbgDropouts; }
 
 void MotionSensor::printFastStatus() {
   uint32_t now = micros();
@@ -262,6 +326,7 @@ void MotionSensor::resetDiag() {
   dbgErrAbsMax = 0.0f;
   dbgRpmMax = 0.0f;
   dbgHzMin = 0.0f;
+  dbgDropouts = 0;
   readFailures = 0;
 }
 

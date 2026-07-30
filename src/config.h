@@ -33,7 +33,8 @@ constexpr uint32_t SERIAL_BAUD = 921600;
 
 constexpr uint16_t SHORT_PRESS_MIN_MS = 50;
 constexpr uint16_t SHORT_PRESS_MAX_MS = 600;
-constexpr uint16_t LONG_PRESS_MS = 2000;
+constexpr uint16_t MODE_SWITCH_PRESS_MS = 2500;  // 2,5s halten: Stab-/Dreh-Modus umschalten
+constexpr uint16_t SETUP_PRESS_MS = 6000;        // 6s halten: Setup
 
 constexpr float TWO_PI_F = 6.28318530718f;
 constexpr float PI_F = 3.14159265359f;
@@ -41,6 +42,10 @@ constexpr float PI_F = 3.14159265359f;
 // Positioniertes Bild: maximale Winkelschritte pro Umdrehung (Bildschaerfe).
 // Real durch Drehzahl & SK9822-show()-Dauer begrenzt (adaptiv). Hoch = scharf.
 constexpr uint16_t POV_MAX_FINE_STEPS = 480;
+
+// Obergrenze der Lead-Kompensation (rad). Sollte die gemessene Frame-Dauer
+// einmal ausreissen, springt das Bild sonst weit weg statt nur leicht daneben.
+constexpr float POV_MAX_LEAD_RAD = 0.35f;
 
 constexpr uint8_t MPU_ADDR = 0x68;
 constexpr uint8_t MPU_REG_SMPLRT_DIV = 0x19;
@@ -84,6 +89,7 @@ constexpr uint8_t GYRO_AXIS_REG[3] = {
 constexpr uint8_t MPU_REG_ACCEL_XOUT_H = 0x3B;
 constexpr uint8_t ACCEL_AXIS_REG[3] = { 0x3B, 0x3D, 0x3F };
 constexpr uint8_t MPU_ACCEL_FS_VALUE = 0x18;  // ±16 g: bei 30-40cm-Stab saettigt ±8g schon ab ~2,4 U/s
+constexpr float ACCEL_SCALE_16G = 2048.0f;    // LSB pro g bei ±16 g (fuer die Neigung im Stab-Modus)
 
 // Sensor-Task.
 constexpr uint32_t SENSOR_TASK_STACK = 4096;
@@ -91,6 +97,9 @@ constexpr uint8_t SENSOR_TASK_PRIORITY = 2;   // ueber loopTask (1) -> sampelt a
 constexpr float SENSOR_SPEED_ALPHA = 0.10f;   // Tiefpass fuer Drehgeschwindigkeit
 constexpr uint32_t ROT_ON_DELAY_US = 20000;   // Hysterese: so lange ueber Schwelle -> aktiv
 constexpr uint32_t ROT_OFF_DELAY_US = 150000; // so lange unter Schwelle -> ruht
+// Erst nach diesem echten Stillstand wird der Winkel auf 0 zurueckgesetzt. Kurze
+// Aussetzer (Handdrehung) duerfen die Phase nicht zerstoeren.
+constexpr uint32_t ROT_RESET_AFTER_US = 1500000;
 
 // Gravitations-Phase-Lock.
 constexpr float PHASE_LOCK_PLL_GAIN = 0.45f;     // Korrektur pro Umdrehung (hoeher = haelt Bild fester)
@@ -100,12 +109,28 @@ constexpr float PHASE_LOCK_MIN_RAD = 4.0f;        // ~0,64 U/s (greift schon bei
 constexpr float PHASE_LOCK_MAX_RAD = 20.0f;       // ~3,2 U/s: darueber saettigt auch ±16g -> Lock aus, reines Gyro
 constexpr float PHASE_LOCK_REF = 0.0f;            // Zielwinkel an der Phasenmarke
 
+// ---- Automatische Gain-Kalibrierung --------------------------------------
+// Der Phase-Lock liefert einmal pro Umdrehung einen absoluten Winkelbezug
+// (Schwerkraft). Der dabei gemessene Restfehler err haengt direkt am
+// Skalenfehler G der Winkelmessung: pro Umdrehung laeuft der Winkel um
+// (G-1)*2pi davon, der PLL zieht mit dem Faktor P zurueck, im eingeschwungenen
+// Zustand gilt also err = -(G-1)*2pi/P. Der Fixpunkt err = 0 ist damit exakt
+// G = 1 - unabhaengig davon, wie genau P bekannt ist. Deshalb genuegt ein
+// langsamer Integrator mit richtigem Vorzeichen.
+constexpr float AUTOGAIN_RATE = 0.002f;        // Schrittweite pro Lock-Ereignis
+constexpr float AUTOGAIN_MAX_ERR_RAD = 1.05f;  // groessere Fehler = unplausibel, verwerfen
+
 constexpr uint32_t SENSOR_SERIAL_INTERVAL_US = 50000;
 // Samplezahl der Nachkalibrierung im Betrieb (bei ~1 kHz Task ca. 1,5 s).
 constexpr uint16_t CALIB_SAMPLES = 1500;
 
 // ---- Muster-System -------------------------------------------------------
-constexpr uint8_t PATTERN_BUILTIN_COUNT = 20;   // eingebaute Muster
+constexpr uint8_t PATTERN_BUILTIN_COUNT = 9;    // eingebaute Muster (helle Partikel-Effekte)
+// Stab-Modus: der Stab wird NICHT gedreht, sondern in der Hand gehalten. Der
+// 65-LED-Streifen laeuft dann als lineares, bewegungsreaktives Lichtspiel statt
+// als POV-Bild. Diese Effekte liegen in WandPatterns - kinetische Spielereien
+// (kollidierende/jagende Punkte), nicht flaechige Fuellungen.
+constexpr uint8_t WAND_PATTERN_COUNT = 8;
 constexpr uint8_t PALETTE_SIZE = 16;            // Farbpalette (Editor + Text)
 constexpr uint8_t CUSTOM_SLOTS = 4;             // eigene Zeichen-Slots
 constexpr uint8_t CUSTOM_COLS = 48;             // Spalten im Zeichengitter
@@ -120,7 +145,11 @@ constexpr uint8_t TEXT_MAX = 32;                // max Zeichen im Text
 // dann nur das Fenster abgetastet, dafuer mit PREVIEW_FINE_COLS Schritten -
 // vergleichbar fein wie die adaptiven Schritte des Renderers.
 constexpr uint8_t PREVIEW_FINE_COLS = 120;
-constexpr uint16_t PREVIEW_MAX_COLS = 192;      // Puffergroesse (>= povColumns-Max und PREVIEW_FINE_COLS)
+// Puffergroesse UND Obergrenze der Vorschau-Spalten. Bewusst unter dem povColumns-
+// Maximum (255): die Vorschau ist ein Daumenkino von ~240 px, das der ESP synchron
+// im Webserver-Handler rendert - jede zusaetzliche Spalte kostet dort Latenz. 192
+// reicht optisch voellig; hoehere povColumns-Werte werden fuer die Vorschau gedeckelt.
+constexpr uint16_t PREVIEW_MAX_COLS = 192;
 constexpr uint32_t PREVIEW_BYTES = static_cast<uint32_t>(PREVIEW_MAX_COLS) * NUM_LEDS * 2;  // RGB565
 
 constexpr uint8_t PATTERN_MODE_BUILTIN = 0;

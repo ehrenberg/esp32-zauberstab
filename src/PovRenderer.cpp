@@ -1,14 +1,20 @@
 #include "PovRenderer.h"
 #include "Patterns.h"
+#include "WandPatterns.h"
 #include <math.h>
 
 PovRenderer::PovRenderer(Settings& settings, LedController& leds, MotionSensor& sensor)
   : settings(settings), ledController(leds), sensor(sensor) {}
 
 void PovRenderer::reset() {
-  // SK9822 schiebt 65 LEDs in ~100 us heraus (WS2812B brauchte ~2200 us).
-  // Konservativer Startwert, den der gemessene Tiefpass schnell nachzieht.
-  frameTimeUs = 200.0f;
+  // Startwert fuer die Frame-Dauer (Muster rechnen + show). Der Tiefpass zieht
+  // ihn nach den ersten Frames auf den echten Wert. Bewusst eher zu hoch als zu
+  // niedrig: zu niedrig plant der Renderer Spalten ein, die er nie schafft.
+  frameTimeUs = 800.0f;
+  gateValid = false;
+  lastRawAngle = 0.0f;
+  covValid = false;
+  covMin = covMax = covWindow = 0.0f;
   effectiveCols = settings.povColumns;
   currentColumn = 0xFFFF;
   lastFrameBlack = false;
@@ -21,6 +27,10 @@ void PovRenderer::reset() {
 }
 
 void PovRenderer::render() {
+  // Stab-Modus: der Stab wird nicht gedreht. Kein Winkel, keine Spaltenlogik -
+  // der Streifen laeuft als lineares, bewegungsreaktives Lichtspiel.
+  if (settings.wandMode) { renderWand(); return; }
+
   const uint32_t now = micros();
   CRGB* leds = ledController.buffer();
 
@@ -35,47 +45,81 @@ void PovRenderer::render() {
   }
 
   const float speed = sensor.speedRad();
-  const float angle = sensor.angle();
+  const float rawAngle = sensor.angle();
 
-  // Maximal darstellbare Winkelschritte pro Umdrehung bei aktueller Drehzahl
-  // (1 show() pro Schritt). Speist sowohl Vollkreis als auch Bild-Modus.
-  const float revPeriodUs = (speed > 0.01f) ? (TWO_PI_F / speed) * 1e6f : 1e9f;
-  const uint16_t maxCols = static_cast<uint16_t>(revPeriodUs / frameTimeUs);
+  // ---- Lead-Kompensation ---------------------------------------------------
+  // Zwischen "Winkel gelesen" und "LEDs leuchten" vergeht eine volle Frame-Zeit
+  // (Muster rechnen + show). Der ESP32-C3 hat keine Hardware-FPU, das Rechnen
+  // von 65 LEDs mit atan2f/sqrtf dominiert diese Zeit deutlich. Ohne Vorhalt
+  // haengt das Bild um omega*T hinterher - und zwar drehzahlabhaengig, was sich
+  // wie Drift anfuehlt. Das angezeigte Frame steht von T bis 2T nach dem Lesen,
+  // die Bildmitte liegt also bei 1,5*T.
+  float lead = sensor.signedRate() * (frameTimeUs * 1.5e-6f);
+  if (lead > POV_MAX_LEAD_RAD) lead = POV_MAX_LEAD_RAD;
+  else if (lead < -POV_MAX_LEAD_RAD) lead = -POV_MAX_LEAD_RAD;
+
+  float angle = rawAngle + lead;
+  if (angle >= TWO_PI_F) angle -= TWO_PI_F;
+  else if (angle < 0.0f) angle += TWO_PI_F;
 
   // Positioniertes Bild nur fuer eingebaute Muster (Custom/Text bleiben Vollkreis).
   const bool positioned = settings.imageMode && settings.patternMode == PATTERN_MODE_BUILTIN;
 
-  // Winkelaufloesung: Vollkreis nutzt povColumns; das positionierte Bild rendert
-  // am ECHTEN Winkel mit so vielen feinen Schritten, wie Drehzahl & SK9822
-  // zulassen -> scharfes kleines Bild statt grober Spalten.
-  uint16_t gateSteps;
-  if (positioned) {
-    gateSteps = maxCols;
-    if (gateSteps < 32) gateSteps = 32;
-    if (gateSteps > POV_MAX_FINE_STEPS) gateSteps = POV_MAX_FINE_STEPS;
-  } else {
-    gateSteps = settings.povColumns;
-    // Text/Zeichnung/Foto haben eine eigene native Spaltenzahl. Liegt povColumns
-    // darunter, werden Bildspalten schlicht uebersprungen - ein 12-Zeichen-Text
-    // braucht 72 Spalten, mit 46 fehlt jede dritte Glyphenspalte.
-    const uint16_t need = Patterns::nativeColumns(settings);
-    if (need > gateSteps) gateSteps = need;
-    if (maxCols < gateSteps) gateSteps = maxCols < 4 ? 4 : maxCols;
-  }
-  effectiveCols = gateSteps > 255 ? 255 : static_cast<uint8_t>(gateSteps);
-
-  // ---- Bild-Modus: ausserhalb des Bildfensters nur schwarz, kein Rechenaufwand ----
+  // ---- Bildfenster bestimmen ----------------------------------------------
+  float windowHalf = PI_F;
+  float d = 0.0f;
   if (positioned) {
     const float imgAng = settings.imageAngleDeg * (TWO_PI_F / 360.0f);
-    float d = angle - imgAng;
+    d = angle - imgAng;
     while (d > PI_F) d -= TWO_PI_F;
     while (d < -PI_F) d += TWO_PI_F;
 
     const float rr = settings.imageRadius * 0.01f;
     const float k = settings.imageScale * 0.01f;
     // Winkelhalbbreite, unter der das Bild ueberhaupt LEDs treffen kann.
-    const float windowHalf = (rr <= k) ? PI_F : (asinf(k / rr) + 0.25f);
+    windowHalf = (rr <= k) ? PI_F : (asinf(k / rr) + 0.25f);
+  }
 
+  // ---- Winkelaufloesung ----------------------------------------------------
+  // Die Schrittzahl wird nur einmal pro Umdrehung neu bestimmt. Vorher lief sie
+  // aus einer staendig zappelnden Schaetzung heraus bei JEDEM Aufruf neu - damit
+  // aendert sich das Raster mitten in der Umdrehung, der Spaltenindex springt
+  // nicht mehr monoton und Spalten werden doppelt gezeichnet oder verschluckt.
+  // Genau das verschmiert das Bild.
+  if (!gateValid || rawAngle < lastRawAngle - PI_F) {
+    const float revPeriodUs = (speed > 0.01f) ? (TWO_PI_F / speed) * 1e6f : 1e9f;
+
+    if (positioned) {
+      // Ausserhalb des Fensters kostet ein Frame fast nichts (nur schwarz), das
+      // Zeitbudget steht also praktisch komplett dem Fenster zur Verfuegung.
+      // Frueher wurde es ueber die ganze Umdrehung verteilt - das verschenkte
+      // Schaerfe im Verhaeltnis Vollkreis/Fenster.
+      const float frac = (windowHalf * 2.0f) / TWO_PI_F;
+      const float budget = revPeriodUs / frameTimeUs;
+      float steps = (frac > 0.01f) ? budget / frac : budget;
+      if (steps < 32.0f) steps = 32.0f;
+      if (steps > POV_MAX_FINE_STEPS) steps = POV_MAX_FINE_STEPS;
+      gateStepsLatched = static_cast<uint16_t>(steps);
+    } else {
+      const uint16_t maxCols = static_cast<uint16_t>(revPeriodUs / frameTimeUs);
+      uint16_t g = settings.povColumns;
+      // Text/Zeichnung/Foto haben eine eigene native Spaltenzahl. Liegt povColumns
+      // darunter, werden Bildspalten schlicht uebersprungen - ein 12-Zeichen-Text
+      // braucht 72 Spalten, mit 46 fehlt jede dritte Glyphenspalte.
+      const uint16_t need = Patterns::nativeColumns(settings);
+      if (need > g) g = need;
+      if (maxCols < g) g = maxCols < 4 ? 4 : maxCols;
+      gateStepsLatched = g;
+    }
+    gateValid = true;
+  }
+  lastRawAngle = rawAngle;
+
+  const uint16_t gateSteps = gateStepsLatched;
+  effectiveCols = gateSteps > 255 ? 255 : static_cast<uint8_t>(gateSteps);
+
+  // ---- Bild-Modus: ausserhalb des Bildfensters nur schwarz, kein Rechenaufwand ----
+  if (positioned) {
     if (fabsf(d) > windowHalf) {
       currentColumn = 0xFFFF;
       const bool forced = now - lastShowAt >= settings.maxColumnHoldUs;
@@ -100,9 +144,22 @@ void PovRenderer::render() {
   // Umdrehungswechsel (Spaltenindex springt zurueck) -> Animationszeit nachziehen.
   if (currentColumn == 0xFFFF || nextColumn < currentColumn) animMs = millis();
 
+  // Diagnose: welcher Winkelbereich des Bildfensters wird wirklich gezeichnet?
+  // Deckt das nicht symmetrisch +/-windowHalf ab, fehlt das Bild dort wirklich -
+  // dann liegt es an der Winkelkette, nicht an der Mustermathematik.
+  if (positioned) {
+    if (!covValid) { covMin = d; covMax = d; covValid = true; }
+    else {
+      if (d < covMin) covMin = d;
+      if (d > covMax) covMax = d;
+    }
+    covWindow = windowHalf;
+  }
+
   currentColumn = nextColumn;
   lastShowAt = now;
   lastFrameBlack = false;
+  const uint32_t frameStart = micros();
 
   if (settings.motionBlur > 0) fadeToBlackBy(leds, NUM_LEDS, settings.motionBlur);
   else fill_solid(leds, NUM_LEDS, CRGB::Black);
@@ -134,11 +191,15 @@ void PovRenderer::render() {
     }
   }
 
-  // Echte show()-Dauer messen -> speist adaptive Schrittzahl.
-  const uint32_t showStart = micros();
   ledController.show();
-  const uint32_t showDur = micros() - showStart;
-  frameTimeUs += (static_cast<float>(showDur) - frameTimeUs) * 0.1f;
+
+  // Dauer des GANZEN Frames messen, nicht nur die von show(). Vorher speiste
+  // allein die show()-Zeit (~100 us) die Schrittzahl-Schaetzung, waehrend das
+  // Rechnen der Muster auf dem FPU-losen C3 ein Vielfaches davon braucht. Die
+  // Folge: der Renderer plante ein Vielfaches der Spalten ein, die er real
+  // ausgeben kann, kam nie hinterher und das Bild verschmierte.
+  const uint32_t frameDur = micros() - frameStart;
+  frameTimeUs += (static_cast<float>(frameDur) - frameTimeUs) * 0.1f;
   outputCounter++;
 
   const uint32_t rateNow = millis();
@@ -150,11 +211,37 @@ void PovRenderer::render() {
   }
 }
 
+void PovRenderer::renderWand() {
+  // Feste Bildrate ~120 fps: gleichmaessig weich, aber nicht schneller als noetig
+  // (SK9822-show ist billig, aber die Motion-Signale aendern sich langsamer).
+  const uint32_t now = micros();
+  const uint32_t elapsed = now - lastWandUs;
+  if (elapsed < 8000) return;
+  // dt fuer die Bewegungsintegration; nach einer Pause (erster Frame) deckeln,
+  // damit Baelle/Tropfen nicht in einem Riesenschritt aus dem Bild springen.
+  float dt = elapsed * 1e-6f;
+  if (dt > 0.05f) dt = 0.05f;
+  lastWandUs = now;
+
+  CRGB* leds = ledController.buffer();
+  const float energy = sensor.wandEnergy();
+  const float swing = sensor.signedRate();
+  const float tilt = sensor.wandTilt();
+  const float shake = sensor.wandShake();
+  WandPatterns::render(leds, settings.wandPattern, dt, energy, swing, tilt, shake);
+  ledController.show();
+}
+
 bool PovRenderer::isRotationActive() const { return sensor.isRotating(); }
 uint8_t PovRenderer::column() const { return static_cast<uint8_t>(currentColumn); }
 float PovRenderer::rpm() const { return sensor.rpm(); }
 uint32_t PovRenderer::outputsPerSecond() const { return outputRate; }
 uint8_t PovRenderer::effectiveColumns() const { return effectiveCols; }
+uint32_t PovRenderer::frameUs() const { return static_cast<uint32_t>(frameTimeUs); }
+float PovRenderer::coverMinDeg() const { return covMin * 57.2957795f; }
+float PovRenderer::coverMaxDeg() const { return covMax * 57.2957795f; }
+float PovRenderer::coverWindowDeg() const { return covWindow * 57.2957795f; }
+uint32_t PovRenderer::dropouts() const { return sensor.dropouts(); }
 bool PovRenderer::isLocked() const { return sensor.isLocked(); }
 float PovRenderer::sampleHz() const { return sensor.sampleRateHz(); }
 uint32_t PovRenderer::i2cFails() const { return sensor.failedReads(); }

@@ -52,6 +52,19 @@ void LedController::showPatternChange(uint8_t pattern) {
   clear(true);
 }
 
+void LedController::showModeSwitch(bool wandMode) {
+  // Kurzer Farb-Wisch vom Griff zur Spitze als klare Quittung des Modus.
+  const CRGB col = wandMode ? CRGB(0, 200, 60) : CRGB(80, 70, 255);
+  FastLED.clear();
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
+    leds[i] = col;
+    if ((i & 3) == 0) FastLED.show();  // als Aufbau sichtbar
+  }
+  FastLED.show();
+  delay(320);
+  clear(true);
+}
+
 void LedController::showCalibrationProgress(int sample, int samples) {
   // Eleganter Komet mit Schweif laeuft ueber den Stab, Farbe wandert mit dem
   // Fortschritt von Violett -> Cyan -> Gruen. Nur wenige LEDs an -> wenig Strom.

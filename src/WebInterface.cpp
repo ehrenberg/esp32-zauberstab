@@ -1,6 +1,7 @@
 #include "WebInterface.h"
 #include "WebUI.h"
 #include "Patterns.h"
+#include "WandPatterns.h"
 #include "PatternStore.h"
 #include "PhotoStore.h"
 #include <math.h>
@@ -105,15 +106,18 @@ String WebInterface::stateJson() {
   j += ",\"persist\":" + String(settings.angularPersistence);
   j += ",\"current\":" + String(settings.currentLimitMa);
   j += ",\"holdus\":" + String(settings.maxColumnHoldUs);
-  j += ",\"gain\":" + String(settings.angleGain, 2);
+  j += ",\"gain\":" + String(settings.angleGain, 3);  // 3 Nachkommastellen: Slider-Schrittweite ist 0,005
   j += ",\"threshold\":" + String(settings.gyroThreshold, 2);
   j += ",\"axis\":" + String(settings.gyroAxis);
   j += ",\"invert\":" + String(settings.invertDirection ? 1 : 0);
   j += ",\"plock\":" + String(settings.phaseLock ? 1 : 0);
+  j += ",\"again\":" + String(settings.autoGain ? 1 : 0);
   j += ",\"imode\":" + String(settings.imageMode ? 1 : 0);
   j += ",\"iang\":" + String(settings.imageAngleDeg);
   j += ",\"irad\":" + String(settings.imageRadius);
   j += ",\"iscale\":" + String(settings.imageScale);
+  j += ",\"wmode\":" + String(settings.wandMode ? 1 : 0);
+  j += ",\"wpat\":" + String(settings.wandPattern);
   j += "}";
 
   j += ",\"patterns\":[";
@@ -127,6 +131,13 @@ String WebInterface::stateJson() {
   for (uint8_t i = 0; i < Patterns::COUNT; i++) {
     if (i) j += ",";
     j += Patterns::isHeavy(i) ? "1" : "0";
+  }
+  j += "]";
+
+  j += ",\"wandNames\":[";
+  for (uint8_t i = 0; i < WandPatterns::COUNT; i++) {
+    if (i) j += ",";
+    j += "\"" + String(WandPatterns::name(i)) + "\"";
   }
   j += "]";
 
@@ -149,6 +160,11 @@ void WebInterface::handleStatus() {
   j += ",\"rpm\":" + String(renderer.rpm(), 1);
   j += ",\"outHz\":" + String(renderer.outputsPerSecond());
   j += ",\"effCols\":" + String(renderer.effectiveColumns());
+  j += ",\"frameUs\":" + String(renderer.frameUs());
+  j += ",\"covMin\":" + String(renderer.coverMinDeg(), 0);
+  j += ",\"covMax\":" + String(renderer.coverMaxDeg(), 0);
+  j += ",\"covWin\":" + String(renderer.coverWindowDeg(), 0);
+  j += ",\"drops\":" + String(renderer.dropouts());
   j += ",\"rotating\":" + String(renderer.isRotationActive() ? "true" : "false");
   j += ",\"locked\":" + String(renderer.isLocked() ? "true" : "false");
   j += ",\"sampleHz\":" + String(renderer.sampleHz(), 0);
@@ -160,6 +176,11 @@ void WebInterface::handleStatus() {
   j += ",\"rpmMax\":" + String(renderer.rpmMaxSession(), 1);
   j += ",\"hzMin\":" + String(renderer.hzMinSession(), 0);
   j += ",\"calib\":" + String(renderer.isCalibrating() ? 1 : 0);
+  // Live-Gain: bei aktiver Auto-Kalibrierung laeuft der Wert nach, das soll man
+  // im DEV-Tab konvergieren sehen.
+  j += ",\"gain\":" + String(settings.angleGain, 3);
+  j += ",\"again\":" + String(settings.autoGain ? 1 : 0);
+  j += ",\"plock\":" + String(settings.phaseLock ? 1 : 0);
   j += ",\"heap\":" + String(ESP.getFreeHeap());
   j += ",\"uptime\":" + String(millis() / 1000);
   j += "}";
@@ -178,10 +199,13 @@ void WebInterface::handleSettings() {
   if (server.hasArg("axis")) settings.gyroAxis = server.arg("axis").toInt();
   if (server.hasArg("invert")) settings.invertDirection = server.arg("invert").toInt() != 0;
   if (server.hasArg("plock")) settings.phaseLock = server.arg("plock").toInt() != 0;
+  if (server.hasArg("again")) settings.autoGain = server.arg("again").toInt() != 0;
   if (server.hasArg("imode")) settings.imageMode = server.arg("imode").toInt() != 0;
   if (server.hasArg("iang")) settings.imageAngleDeg = server.arg("iang").toInt();
   if (server.hasArg("irad")) settings.imageRadius = server.arg("irad").toInt();
   if (server.hasArg("iscale")) settings.imageScale = server.arg("iscale").toInt();
+  if (server.hasArg("wmode")) settings.wandMode = server.arg("wmode").toInt() != 0;
+  if (server.hasArg("wpat")) settings.wandPattern = server.arg("wpat").toInt();
 
   clampSettings(settings);
   saveSettings(settings);

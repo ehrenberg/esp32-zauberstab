@@ -22,6 +22,16 @@ public:
   bool isRotating() const;
   bool isLocked() const;      // Phase-Lock greift gerade
   float gyroRad() const;      // letzter Rohwert rad/s (Debug)
+  float signedRate() const;   // Drehrate im Winkelraum, mit Vorzeichen (rad/s)
+
+  // ---- Stab-Modus-Telemetrie ------------------------------------------------
+  // Nur aktiv, wenn cfg->wandMode gesetzt ist (dann liest der Task zusaetzlich
+  // eine Beschleunigungsachse). Liefert Bewegungssignale fuer die Lichtspiele,
+  // wenn der Stab gehalten statt gedreht wird.
+  float wandEnergy() const;   // Betrag der Bewegung, 0..1
+  float wandTilt() const;     // langsame Neigung entlang einer Achse, ~[-1,1]
+  float wandShake() const;    // kurze, harte Bewegungsspitzen, ~0..1
+
   float offset() const;
   float sampleRateHz() const;
   uint32_t failedReads() const;
@@ -31,6 +41,7 @@ public:
   float errMaxDeg() const;
   float rpmMaxSession() const;
   float hzMinSession() const;
+  uint32_t dropouts() const;  // Abbrueche der Drehungserkennung pro Sitzung
   void printFastStatus();
 
   // Nachkalibrierung im laufenden Betrieb. Der Gyro-Offset wird sonst nur beim
@@ -39,6 +50,11 @@ public:
   // und startet erst, wenn der Stab ruht.
   void requestCalibration();
   bool isCalibrating() const;
+
+  // true, sobald die automatische Gain-Kalibrierung den Wert veraendert hat -
+  // dann muss beim Verlassen des Display-Modus gespeichert werden.
+  bool gainChanged() const;
+  void clearGainChanged();
 
   // Diagnose einer Schleuder-Sitzung (im RAM gesammelt, ins NVS gesichert).
   void resetDiag();         // beim Display-Start
@@ -60,6 +76,7 @@ private:
   volatile float angleRad = 0.0f;
   volatile float speed = 0.0f;
   volatile float lastGyroRad = 0.0f;
+  volatile float signedRateRad = 0.0f;
   volatile bool rotating = false;
   volatile bool locked = false;
   volatile bool resetRequested = false;
@@ -67,11 +84,17 @@ private:
   // Nachkalibrierung (laeuft im Sensor-Task)
   volatile bool calibRequested = false;
   volatile bool calibBusy = false;
+  volatile bool gainAdjusted = false;
   uint16_t calibCount = 0;
   float calibSum = 0.0f;
 
   float gyroOffset = 0.0f;
   uint32_t lastStepUs = 0;
+
+  // Stab-Modus: langsame Neigung (EMA) und schnelle Abweichung (Shake) einer
+  // Accel-Achse. Werden nur im Stab-Modus fortgeschrieben.
+  volatile float wandTiltG = 0.0f;
+  volatile float wandShakeG = 0.0f;
 
   // Rotations-Hysterese
   uint32_t aboveSinceUs = 0;
@@ -99,5 +122,7 @@ private:
   volatile float dbgErrAbsMax = 0.0f;    // groesster |Fehler| der Sitzung
   volatile float dbgRpmMax = 0.0f;       // hoechste Drehzahl der Sitzung
   volatile float dbgHzMin = 0.0f;        // niedrigste Sample-Rate der Sitzung
+  volatile uint32_t dbgDropouts = 0;     // wie oft die Drehung als "ruht" galt
+  uint32_t stoppedSinceUs = 0;
   uint32_t lastDiagAt = 0;
 };
