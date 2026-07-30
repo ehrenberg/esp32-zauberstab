@@ -73,10 +73,10 @@ die POV-Schleife geht. Zurück ins Setup nur über langen Tastendruck.
 
 ## Die zwei Anzeigearten
 
-**Vollkreis** (`Bild oben` = aus): Das Muster füllt die ganze Kreisscheibe. Die
-Winkelauflösung ist der Regler *POV-Spalten*.
+**Vollkreis** (`Bild oben` = aus, Standard): Das Muster füllt die ganze Kreisscheibe. Die
+Winkelauflösung ist der Regler *Auflösung (Spalten)*.
 
-**Positioniertes Bild** (`Bild oben` = ein, Standard): Das Muster erscheint als kleines,
+**Positioniertes Bild** (`Bild oben` = ein): Das Muster erscheint als kleines,
 stehendes Bild an einer Stelle des Kreises — einstellbar über *Bildwinkel* (270° = oben),
 *Bildhöhe* und *Bildgröße*. Außerhalb des Bildfensters bleibt der Stab dunkel. Weil das
 Bild nur einen schmalen Winkelbereich belegt, rendert der Stab dort adaptiv mit bis zu
@@ -113,7 +113,7 @@ Zum Aufhängen als POV-Bild den Stab-Modus einfach wieder ausschalten.
 
 | Regler | Bedeutung |
 |---|---|
-| **POV-Spalten** (8–192) | Winkelauflösung im Vollkreis. Mehr = feiner, aber jede Spalte steht kürzer und wirkt dunkler. Text, Zeichnungen und Fotos heben den Wert automatisch auf ihren eigenen Bedarf an. |
+| **Auflösung (Spalten)** (16–200) | Winkelauflösung im Vollkreis. Mehr = feiner, aber jede Spalte steht kürzer und wirkt dunkler. Text, Zeichnungen und Fotos heben den Wert automatisch auf ihren eigenen Bedarf an. |
 | **Angle Gain** | Trimmt die Winkelmessung. Erscheint das Bild mehrfach → zu hoch. Wandert es → zu niedrig. |
 | **Gyro-Achse** | Muss zur Einbaulage des Sensors passen. |
 | **Stromlimit** | Schützt Akku und Spannungslage. Zu niedrig → FastLED dimmt global. |

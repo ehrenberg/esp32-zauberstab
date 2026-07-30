@@ -23,7 +23,7 @@ void clampSettings(Settings& settings) {
   if (settings.maxColumnHoldUs > 15000) settings.maxColumnHoldUs = 15000;
   if (settings.motionBlur > 50) settings.motionBlur = 50;
   if (settings.angularPersistence < 1) settings.angularPersistence = 1;
-  if (settings.angularPersistence > 9) settings.angularPersistence = 9;
+  if (settings.angularPersistence > 6) settings.angularPersistence = 6;
   if (settings.gyroAxis > 2) settings.gyroAxis = 1;
   if (settings.patternMode > PATTERN_MODE_IMAGE) settings.patternMode = PATTERN_MODE_BUILTIN;
   if (settings.selectedPattern >= PATTERN_BUILTIN_COUNT) settings.selectedPattern = 0;

@@ -139,30 +139,36 @@ nav .ic{font-size:21px;line-height:1}
 </section>
 
 <section id="v-setup" class="view">
-<div class="card"><h2>Stab-Modus</h2>
-<label class="row"><span>Stab-Modus (nicht drehen) <i class="info" onclick="App.info('wmode')">i</i></span><span class="sw"><input type="checkbox" id="wmode" onchange="App.saveSet('wmode',this.checked?1:0)"><i></i></span></label>
-<label class="row"><span>Lichtspiel</span><select id="wpat" onchange="App.saveSet('wpat',this.value)"></select></label>
-<p class="hint">Ohne Drehen: der Stab macht in der Hand bewegungsreaktive Lichtspiele. Wedeln, Neigen und Schuetteln steuern Tempo, Farbe und Fuellung. Im laufenden Betrieb blaettert der Taster durch die Lichtspiele. Zum Aufhaengen als POV-Bild diesen Schalter wieder aus.</p>
+<div class="card"><h2>Bild &amp; Schärfe</h2><div id="setImgQ"></div>
+<p class="hint">Auflösung = Winkelspalten pro Umdrehung (mehr = schärfer, aber dunkler). Winkelbreite verdickt jede Spalte, Nachleuchten zieht eine weiche Spur.</p>
 </div>
-<div class="card"><h2>Anzeige</h2><div id="setA"></div>
+<div class="card"><h2>Helligkeit &amp; Strom</h2><div id="setPow"></div>
+<p class="hint">Greift das Stromlimit, dimmt FastLED global – gefüllte Motive (⚡) wirken dann flau. Dann Helligkeit runter oder Limit hoch.</p>
+</div>
+<div class="card"><h2>Timing &amp; Zeit-Modus</h2><div id="setTim"></div>
 <label class="row"><span>Zeit-Modus (ohne Sensor) <i class="info" onclick="App.info('tmode')">i</i></span><span class="sw"><input type="checkbox" id="tmode" onchange="App.saveSet('tmode',this.checked?1:0)"><i></i></span></label>
-<p class="hint">Spalten laufen mit fester Taktung ("Halten µs" = Dauer je Spalte), der Sensor wird ignoriert. Das Bild steht innerlich völlig ruhig, dreht sich aber frei – die Drehzahl von Hand darauf einpendeln.</p>
+<p class="hint">Zeit-Modus: Spalten laufen mit fester Taktung (Spaltendauer), der Sensor wird ignoriert – das Bild steht innerlich ruhig, dreht sich aber frei. Drehzahl von Hand einpendeln.</p>
 </div>
-<div class="card"><h2>Bild im Kreis</h2>
-<label class="row"><span>Bild oben (statt Vollkreis) <i class="info" onclick="App.info('imode')">i</i></span><span class="sw"><input type="checkbox" id="imode" onchange="App.saveSet('imode',this.checked?1:0)"><i></i></span></label>
-<div id="setImg"></div>
-<p class="hint">Bildwinkel verschiebt das Bild auf dem Kreis (oben einstellen), Bildhoehe den Abstand zur Mitte, Bildgroesse den Durchmesser. Aus = Muster fuellt den ganzen Kreis.</p>
-</div>
-<div class="card"><h2>Bewegung &amp; Sensor</h2><div id="setB"></div>
+<div class="card"><h2>Drehung &amp; Sensor</h2><div id="setSens"></div>
 <label class="row"><span>Gyro-Achse <i class="info" onclick="App.info('axis')">i</i></span><select id="axis" onchange="App.saveSet('axis',this.value)"><option value="0">X</option><option value="1">Y</option><option value="2">Z</option></select></label>
 <label class="row"><span>Richtung invertieren <i class="info" onclick="App.info('invert')">i</i></span><span class="sw"><input type="checkbox" id="invert" onchange="App.saveSet('invert',this.checked?1:0)"><i></i></span></label>
 <label class="row"><span>Phase-Lock (Drift-Korrektur) <i class="info" onclick="App.info('plock')">i</i></span><span class="sw"><input type="checkbox" id="plock" onchange="App.saveSet('plock',this.checked?1:0)"><i></i></span></label>
 <button class="btn sec" style="margin-top:8px" onclick="App.calibrate()">Sensor neu kalibrieren</button>
-<p class="hint" style="margin-top:10px">Der Gyro-Nullpunkt wird sonst nur beim Einschalten bestimmt. Wandert das Bild langsam, hier neu kalibrieren – Stab dabei still halten.</p>
+<p class="hint" style="margin-top:10px">Wandert das Bild langsam: Angle Gain trimmen oder neu kalibrieren (Stab still halten). Gyro-Achse muss zur Einbaulage passen.</p>
+</div>
+<div class="card"><h2>Bild im Kreis (optional)</h2>
+<label class="row"><span>Bild oben (statt Vollkreis) <i class="info" onclick="App.info('imode')">i</i></span><span class="sw"><input type="checkbox" id="imode" onchange="App.saveSet('imode',this.checked?1:0)"><i></i></span></label>
+<div id="setImg"></div>
+<p class="hint">Aus (Standard) = Motiv füllt den ganzen Kreis. An = kleines stehendes Bild an einer Stelle; Bildwinkel/-höhe/-größe positionieren es.</p>
+</div>
+<div class="card"><h2>Stab-Modus</h2>
+<label class="row"><span>Stab-Modus (nicht drehen) <i class="info" onclick="App.info('wmode')">i</i></span><span class="sw"><input type="checkbox" id="wmode" onchange="App.saveSet('wmode',this.checked?1:0)"><i></i></span></label>
+<label class="row"><span>Lichtspiel</span><select id="wpat" onchange="App.saveSet('wpat',this.value)"></select></label>
+<p class="hint">Ohne Drehen: bewegungsreaktive Lichtspiele in der Hand. Zum POV-Bild wieder aus.</p>
 </div>
 <div class="card"><h2>Betrieb</h2>
 <div class="btnrow"><button class="btn ok" onclick="App.run(1)">Display starten</button><button class="btn warn" onclick="App.run(0)">Stop</button></div>
-<p class="hint" style="margin-top:12px">Beim Start wird das WLAN getrennt (maximale POV-Leistung). Zum Zurueckkehren ins Setup den Taster lang druecken.</p>
+<p class="hint" style="margin-top:12px">Beim Start wird das WLAN getrennt (maximale POV-Leistung). Zurück ins Setup: Taster lang drücken.</p>
 </div>
 </section>
 
@@ -211,7 +217,7 @@ const App={
  buildTiles(){const g=document.getElementById('tiles');g.innerHTML='';
   const hv=this.st.heavy||[];
   this.st.patterns.forEach((n,i)=>{const d=document.createElement('div');d.className='tile';d.textContent=n;
-   // Blitz = leuchtet viele LEDs gleichzeitig -> Stromlimit dimmt global herunter.
+   // ⚡ = leuchtet viele LEDs gleichzeitig -> Stromlimit dimmt global herunter.
    if(hv[i]){const s=document.createElement('span');s.className='hvy';s.textContent='⚡';d.appendChild(s);}
    d.onclick=()=>this.pick(0,i);g.appendChild(d);});this.markTiles();},
  markTiles(){document.querySelectorAll('#tiles .tile').forEach((t,i)=>
@@ -224,10 +230,12 @@ const App={
   mk(document.getElementById('drawPal'),this.curColor,(i,h)=>{this.curColor=i;[...h.children].forEach((c,k)=>c.classList.toggle('sel',k==i));});
   mk(document.getElementById('textPal'),this.st.textColor,(i,h)=>{this.curTextColor=i;[...h.children].forEach((c,k)=>c.classList.toggle('sel',k==i));this.textApply();});
   this.curTextColor=this.st.textColor;},
- SET_A:[['bright','Helligkeit',1,100,1],['columns','POV-Spalten',8,255,1],['blur','Nachleuchten',0,50,1],['persist','Winkelbreite',1,9,1],['current','Stromlimit mA',300,2000,100],['holdus','Halten µs',200,15000,100]],
- SET_B:[['gain','Angle Gain (Drift-Trim)',0.5,1.5,0.005],['threshold','Gyro-Schwelle',0.05,8,0.05]],
- SET_IMG:[['iang','Bildwinkel',0,359,1],['irad','Bildhoehe',0,100,1],['iscale','Bildgroesse',15,100,1]],
- buildSettings(){const mk=(host,arr)=>{host.innerHTML='';arr.forEach(([k,lab,mn,mx,st])=>{
+ SET_IMGQ:[['columns','Auflösung (Spalten)',16,200,2],['persist','Winkelbreite',1,6,1],['blur','Nachleuchten',0,40,1]],
+ SET_POW:[['bright','Helligkeit',1,100,1],['current','Stromlimit mA',300,2000,100]],
+ SET_TIM:[['holdus','Spaltendauer µs',800,12000,100]],
+ SET_SENS:[['gain','Angle Gain (Drift-Trim)',0.5,1.5,0.005],['threshold','Gyro-Schwelle',0.1,8,0.05]],
+ SET_IMG:[['iang','Bildwinkel',0,359,1],['irad','Bildhöhe',0,100,1],['iscale','Bildgröße',15,100,1]],
+ buildSettings(){const mk=(host,arr)=>{if(!host)return;host.innerHTML='';arr.forEach(([k,lab,mn,mx,st])=>{
    const wrap=document.createElement('div');const float=st<1;
    wrap.innerHTML=`<label class="row"><span>${lab} <i class="info" onclick="App.info('${k}')">i</i></span><span class="v" id="v_${k}"></span></label>`+
     `<input class="rng" type="range" id="s_${k}" min="${mn}" max="${mx}" step="${st}">`;
@@ -235,13 +243,16 @@ const App={
    const inp=wrap.querySelector('input');
    inp.oninput=()=>document.getElementById('v_'+k).textContent=float?(+inp.value).toFixed(3):inp.value;
    inp.onchange=()=>this.saveSet(k,inp.value);});};
-  mk(document.getElementById('setA'),this.SET_A);mk(document.getElementById('setB'),this.SET_B);
+  mk(document.getElementById('setImgQ'),this.SET_IMGQ);
+  mk(document.getElementById('setPow'),this.SET_POW);
+  mk(document.getElementById('setTim'),this.SET_TIM);
+  mk(document.getElementById('setSens'),this.SET_SENS);
   mk(document.getElementById('setImg'),this.SET_IMG);
   const wp=document.getElementById('wpat');
   if(wp){wp.innerHTML='';(this.st.wandNames||[]).forEach((n,i)=>{
    const o=document.createElement('option');o.value=i;o.textContent=n;wp.appendChild(o);});}},
  fill(){const s=this.st.settings;
-  [...this.SET_A,...this.SET_B,...this.SET_IMG].forEach(([k,l,mn,mx,st])=>{const e=document.getElementById('s_'+k);if(!e)return;
+  [...this.SET_IMGQ,...this.SET_POW,...this.SET_TIM,...this.SET_SENS,...this.SET_IMG].forEach(([k,l,mn,mx,st])=>{const e=document.getElementById('s_'+k);if(!e)return;
    e.value=s[k];document.getElementById('v_'+k).textContent=st<1?(+s[k]).toFixed(3):s[k];});
   document.getElementById('axis').value=s.axis;
   document.getElementById('invert').checked=!!s.invert;
@@ -389,11 +400,11 @@ const App={
  // ---- Info-Modal ----
  INFO:{
   bright:['Helligkeit','Gesamthelligkeit der LEDs (1-100). Hoeher = heller, zieht aber mehr Strom. Bei schwachem Akku niedriger halten.'],
-  columns:['POV-Spalten','Winkelaufloesung im Vollkreis-, Text- und Mal-Modus (8-192). Mehr = feiner, aber jede Spalte steht kuerzer und wirkt dunkler. Text, Zeichnungen und Fotos heben den Wert automatisch auf ihren eigenen Bedarf an (Text: 6 Spalten pro Zeichen, Foto: 72), damit keine Bildspalte verschluckt wird. Das positionierte Bild ("Bild oben") regelt seine Schaerfe selbst.'],
+  columns:['Auflösung (Spalten)','Winkelspalten pro Umdrehung im Vollkreis-, Text- und Mal-Modus (16-200). Mehr = feiner/schaerfer, aber jede Spalte steht kuerzer und wirkt dunkler. Text, Zeichnungen und Fotos heben den Wert automatisch auf ihren eigenen Bedarf an. Das positionierte Bild ("Bild oben") regelt seine Schaerfe selbst.'],
   blur:['Nachleuchten','Laesst vorherige Frames langsam ausblenden (Bewegungsspur). 0 = gestochen scharf, hoeher = weicher Schweif.'],
-  persist:['Winkelbreite','Verbreitert das Bild um zusaetzliche Winkelschritte. 1 = duennste Darstellung.'],
+  persist:['Winkelbreite','Verbreitert jede Spalte um zusaetzliche Winkelschritte (fuellt Luecken am Rand). 1 = schaerfste, duennste Darstellung; hoeher kostet Rechenzeit.'],
   current:['Stromlimit (mA)','Begrenzt den maximalen LED-Gesamtstrom - schuetzt Akku/Netzteil und haelt Farben/Spannung stabil.'],
-  holdus:['Halten (us)','Sensor-Modus: wie lange eine Spalte maximal stehen bleibt, bevor neu gezeichnet wird. Zeit-Modus: feste Dauer JEDER Spalte - kleiner = schnelleres Durchlaufen, dann schneller drehen.'],
+  holdus:['Spaltendauer (us)','Sensor-Modus: wie lange eine Spalte maximal stehen bleibt, bevor neu gezeichnet wird. Zeit-Modus: feste Dauer JEDER Spalte - kleiner = schnelleres Durchlaufen, dann schneller drehen.'],
   tmode:['Zeit-Modus','Open-Loop wie einfache POV-Staebe: die Spalten laufen mit fester Taktung durch, der Gyro wird ignoriert. Das Bild ist dadurch innerlich absolut ruhig, dreht sich aber frei im Kreis - die Drehgeschwindigkeit von Hand darauf einpendeln. Liest es sich hier sauberer als im Sensor-Modus, liegt die Unruhe am Sensorpfad.'],
   gain:['Angle Gain','Skalierung der Winkelmessung. 1,000 = Standard (1 Messung = 1 echte Umdrehung). Zu hoch -> Bild erscheint mehrfach. Hiermit trimmst du die Drift weg.'],
   threshold:['Gyro-Schwelle','Ab welcher Drehgeschwindigkeit (rad/s) die Anzeige startet.'],
