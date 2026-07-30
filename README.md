@@ -32,7 +32,7 @@ pio device monitor   # Serielle Ausgabe (115200 Baud)
 Gesteuert über den einen Taster — die Aktion entscheidet sich beim Loslassen anhand der
 Haltedauer:
 
-| Zustand | Kurzdruck | 2,5 s halten | 6 s halten |
+| Zustand | Kurzdruck | 2 s halten | 4 s halten |
 |---|---|---|---|
 | **IDLE** (3 blaue LEDs) | Anzeige starten | Modus wechseln¹ | Setup |
 | **DISPLAY** (Schleudern) | nächstes Muster / Lichtspiel | Modus wechseln¹ | Setup |

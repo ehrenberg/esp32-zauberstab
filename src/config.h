@@ -33,8 +33,8 @@ constexpr uint32_t SERIAL_BAUD = 921600;
 
 constexpr uint16_t SHORT_PRESS_MIN_MS = 50;
 constexpr uint16_t SHORT_PRESS_MAX_MS = 600;
-constexpr uint16_t MODE_SWITCH_PRESS_MS = 2500;  // 2,5s halten: Stab-/Dreh-Modus umschalten
-constexpr uint16_t SETUP_PRESS_MS = 6000;        // 6s halten: Setup
+constexpr uint16_t MODE_SWITCH_PRESS_MS = 2000;  // 2s halten: Stab-/Dreh-Modus umschalten
+constexpr uint16_t SETUP_PRESS_MS = 4000;        // 4s halten: Setup (WLAN)
 
 constexpr float TWO_PI_F = 6.28318530718f;
 constexpr float PI_F = 3.14159265359f;

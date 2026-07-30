@@ -37,10 +37,10 @@ Winkel — er integriert nicht selbst. Wegen des eng pollenden POV-Loops ist der
 **Core-0-Watchdog abgeschaltet** (`disableCore0WDT()` in `setup()`).
 
 Zustandsautomat (`AppMode`) in `main.cpp`: BOOT → CALIBRATING → IDLE ⇄ DISPLAY,
-jederzeit → SETUP (6 s halten). Tasterlogik komplett in `main.cpp`. Der Taster wertet
-**auf Loslassen** aus (`ButtonHandler`): Kurzdruck, 2,5 s = Stab-/Dreh-Modus umschalten
-(`handleModeSwitch`, kippt `settings.wandMode`), 6 s = Setup. Auf Loslassen ausgewertet,
-weil ein im Halten feuernder 2,5-s-Trigger sonst losginge, bevor die 6 s erreicht sind.
+jederzeit → SETUP (4 s halten). Tasterlogik komplett in `main.cpp`. Der Taster wertet
+**auf Loslassen** aus (`ButtonHandler`): Kurzdruck, 2 s = Stab-/Dreh-Modus umschalten
+(`handleModeSwitch`, kippt `settings.wandMode`), 4 s = Setup. Auf Loslassen ausgewertet,
+weil ein im Halten feuernder 2-s-Trigger sonst losginge, bevor die 4 s erreicht sind.
 
 ## Nicht offensichtliche Invarianten (hier brechen Änderungen leicht das Bild)
 
